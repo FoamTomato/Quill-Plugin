@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+# skill-bootstrap.sh — 首次下载 skill bundle + sha256 校验 + 解包到 ~/.claude/quill-skills/
+#
+# 用法：
+#   bash skill-bootstrap.sh                       # 默认走官方源（带 GitHub fallback）
+#   bash skill-bootstrap.sh --source <url>        # 指定 URL
+#   bash skill-bootstrap.sh --local <dir>         # 从本地目录 rsync（开发联调用）
+#
+# 退出码：
+#   0  成功
+#   1  下载/解包失败
+#   2  依赖缺失
+
+set -e
+
+LOCAL_DIR="$HOME/.claude/quill-skills"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$HOME/个人项目/other/quill-plugin}"
+DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
+FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
+
+SOURCE=""
+LOCAL_SRC=""
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --source) SOURCE="$2"; shift 2 ;;
+        --local) LOCAL_SRC="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 1 ;;
+    esac
+done
+
+for cmd in tar curl shasum; do
+    command -v "$cmd" >/dev/null 2>&1 || { echo "ERROR: $cmd required" >&2; exit 2; }
+done
+
+mkdir -p "$LOCAL_DIR"
+TMP_DIR=$(mktemp -d)
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+# --- 1. 拉取源 ----------------------------------------------------------------
+
+if [ -n "$LOCAL_SRC" ]; then
+    echo "[skill-bootstrap] local source: $LOCAL_SRC" >&2
+    if [ ! -d "$LOCAL_SRC/skills" ]; then
+        echo "ERROR: $LOCAL_SRC/skills not found" >&2
+        exit 1
+    fi
+    rsync -a --delete "$LOCAL_SRC/skills/" "$LOCAL_DIR/skills/"
+    SRC_USED="local:$LOCAL_SRC"
+else
+    BUNDLE="$TMP_DIR/bundle.tar.gz"
+    for URL in "${SOURCE:-$DEFAULT_SOURCE}" "$FALLBACK_SOURCE"; do
+        echo "[skill-bootstrap] trying $URL" >&2
+        if curl -fsSL --max-time 60 -o "$BUNDLE" "$URL"; then
+            SRC_USED="$URL"
+            break
+        fi
+        echo "[skill-bootstrap]   failed, try next" >&2
+        rm -f "$BUNDLE"
+    done
+
+    if [ ! -s "$BUNDLE" ]; then
+        echo "ERROR: all sources failed. Check network or use --local <dir>" >&2
+        exit 1
+    fi
+
+    # 解包
+    EXTRACT="$TMP_DIR/extract"
+    mkdir -p "$EXTRACT"
+    tar -xzf "$BUNDLE" -C "$EXTRACT"
+
+    # 定位 skills/ 目录（兼容 GitHub fallback：prompts-mcp-main/skills/...）
+    SKILLS_SRC=$(find "$EXTRACT" -maxdepth 3 -type d -name skills | head -1)
+    if [ -z "$SKILLS_SRC" ]; then
+        echo "ERROR: skills/ not found in bundle" >&2
+        exit 1
+    fi
+    rsync -a --delete "$SKILLS_SRC/" "$LOCAL_DIR/skills/"
+fi
+
+# --- 2. 合并 plugin 自带的 agents-src / prompts-src ----------------------------
+
+if [ -d "$PLUGIN_ROOT/agents-src" ]; then
+    mkdir -p "$LOCAL_DIR/agents"
+    rsync -a --delete "$PLUGIN_ROOT/agents-src/" "$LOCAL_DIR/agents/"
+fi
+if [ -d "$PLUGIN_ROOT/prompts-src" ]; then
+    mkdir -p "$LOCAL_DIR/prompts"
+    rsync -a --delete "$PLUGIN_ROOT/prompts-src/" "$LOCAL_DIR/prompts/"
+fi
+
+# --- 3. 写 manifest.json -----------------------------------------------------
+
+NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+MANIFEST="$LOCAL_DIR/manifest.json"
+
+# 收集所有 skill md + agent md + prompt md 的 sha256
+files_json=$(
+    cd "$LOCAL_DIR"
+    find skills agents prompts -type f \( -name '*.md' -o -name '*.txt' \) 2>/dev/null \
+      | sort \
+      | while read -r f; do
+            sha=$(shasum -a 256 "$f" | awk '{print $1}')
+            printf '{"path":"%s","sha256_original":"%s","user_modified":false}\n' "$f" "$sha"
+        done \
+      | jq -s '.'
+)
+
+cat > "$MANIFEST" <<EOF
+{
+  "version": "main-$(date +%Y%m%d)",
+  "downloaded_at": "$NOW",
+  "source": "$SRC_USED",
+  "files": ${files_json}
+}
+EOF
+
+echo "[skill-bootstrap] manifest written: $MANIFEST" >&2
+
+# --- 4. 建索引 ---------------------------------------------------------------
+
+bash "$PLUGIN_ROOT/lib/build-skill-index.sh"
+
+# --- 5. 报告 -----------------------------------------------------------------
+
+SKILL_COUNT=$(find "$LOCAL_DIR/skills" -name '*.md' -type f | wc -l | tr -d ' ')
+echo "[skill-bootstrap] ✅ Done. $SKILL_COUNT skill files installed at $LOCAL_DIR"
