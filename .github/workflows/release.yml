@@ -121,17 +121,36 @@ jobs:
           echo "bump=$BUMP" >> "$GITHUB_OUTPUT"
           echo "::notice::$CUR_TAG → $NEXT_TAG ($BUMP)"
 
+      - name: Install git-cliff (binary release)
+        if: steps.skip-check.outputs.skip != '1'
+        # The orhun/git-cliff-action@v3 docker action sometimes fails at
+        # `apt-get install jq` in the container build (network/timeout flake).
+        # Downloading the pre-built binary from GitHub Releases is faster
+        # and avoids the Docker build entirely.
+        run: |
+          set -euo pipefail
+          VERSION="2.6.1"   # pin so a bad upstream release can't break us silently
+          curl -fsSL "https://github.com/orhun/git-cliff/releases/download/v${VERSION}/git-cliff-${VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            -o /tmp/git-cliff.tar.gz
+          mkdir -p /tmp/git-cliff
+          tar -xzf /tmp/git-cliff.tar.gz -C /tmp/git-cliff --strip-components=1
+          sudo install -m 755 /tmp/git-cliff/git-cliff /usr/local/bin/git-cliff
+          git-cliff --version
+
       - name: Generate changelog with git-cliff
         if: steps.skip-check.outputs.skip != '1'
         id: changelog
-        uses: orhun/git-cliff-action@v3
-        with:
-          config: cliff.toml
-          # --tag tells git-cliff the upcoming version label;
-          # it ranges from prev tag up to HEAD and writes UNRELEASED→<tag> in the output.
-          args: --verbose --tag ${{ steps.version.outputs.next_tag }} --unreleased --strip header
-        env:
-          OUTPUT: CHANGES.md
+        # --tag tells git-cliff the upcoming version label; it ranges from
+        # the prev tag up to HEAD and labels the section as that tag.
+        run: |
+          git-cliff --verbose \
+            --config cliff.toml \
+            --tag "${{ steps.version.outputs.next_tag }}" \
+            --unreleased \
+            --strip header \
+            --output CHANGES.md
+          echo "--- CHANGES.md ---"
+          cat CHANGES.md
 
       - name: Sync plugin.json version field
         if: steps.skip-check.outputs.skip != '1'
