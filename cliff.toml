@@ -1,0 +1,52 @@
+# git-cliff configuration
+# Generates Markdown release notes from Conventional Commit messages.
+# Docs: https://git-cliff.org/docs/configuration
+
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## {{ version }} — {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## Unreleased
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}\
+  {% if commit.breaking %} ⚠️ **BREAKING**{% endif %}\
+  ({{ commit.id | truncate(length=7, end="") }})\
+{% endfor %}
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+postprocessors = []
+
+[git]
+conventional_commits = true
+filter_unconventional = false
+split_commits = false
+commit_parsers = [
+    { message = "^feat",      group = "Features" },
+    { message = "^fix",       group = "Bug Fixes" },
+    { message = "^perf",      group = "Performance" },
+    { message = "^refactor",  group = "Refactor" },
+    { message = "^docs",      group = "Documentation" },
+    { message = "^test",      group = "Tests" },
+    { message = "^style",     group = "Styling" },
+    { message = "^chore",     group = "Chores" },
+    { message = "^ci",        group = "CI" },
+    { message = "^build",     group = "Build" },
+    # Anything not matching the above falls into "Other"; set skip=true to drop instead.
+    { message = ".*",         group = "Other" },
+]
+# Drop merge commits, tag-only commits, and commits marked [skip release].
+commit_preprocessors = []
+filter_commits = false
+tag_pattern = "v[0-9]*"
+skip_tags = ""
+ignore_tags = ""
+topo_order = false
+sort_commits = "oldest"
