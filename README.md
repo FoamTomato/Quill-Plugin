@@ -8,11 +8,12 @@ Claude Code plugin · **4-agent orchestration + PRD production** for any project
 
 | 入口 | 作用 | 产物 |
 |---|---|---|
-| `/quill prd`  | 理解需求 + 整理边界 + 给用户讲解 | `product-requirements.md` / `high-level-design.md` / `flow.drawio` |
-| `/quill ui`   | 前端 UI 设计                      | `sketch/*.html` + `ui-spec.md` |
-| `/quill dev`  | 多批次开发编排（默认链式 test）   | `.quill/runs/<BATCH>/dev-output.md` |
-| `/quill test` | 三维并发测试（PRD/UI/Lint）       | `.quill/runs/<BATCH>/test-reports/*` |
-| `/quill update-skills` | 升级 skill bundle（保留用户改过的文件） | 更新 `~/.claude/quill-skills/` |
+| `/quill:prd`  | 理解需求 + 整理边界 + 给用户讲解 | `product-requirements.md` / `high-level-design.md` / `flow.drawio` |
+| `/quill:ui`   | 前端 UI 设计                      | `sketch/*.html` + `ui-spec.md` |
+| `/quill:dev`  | 多批次开发编排（默认链式 test）   | `.quill/runs/<BATCH>/dev-output.md` |
+| `/quill:test` | 三维并发测试（PRD/UI/Lint）       | `.quill/runs/<BATCH>/test-reports/*` |
+| `/quill:update-skills` | 升级 skill bundle（保留用户改过的文件） | 更新 `~/.claude/quill-skills/` |
+| `/quill:uninstall` | 卸载（清当前项目产物 + 可选清全局缓存 + 调 claude CLI 卸 plugin） | 见 [Uninstall](#uninstall) |
 
 ## Install
 
@@ -37,12 +38,32 @@ claude plugin marketplace add ~/个人项目/other/quill-plugin
 claude plugin install quill@quill
 ```
 
+## <a name="uninstall"></a>Uninstall
+
+在任意已用过 quill 的项目里：
+
+```bash
+You> /quill:uninstall              # 列清单 + y/N 确认，清当前项目产物
+You> /quill:uninstall --yes        # 跳过确认（脚本化场景）
+You> /quill:uninstall --global     # 额外清 ~/.claude/quill-skills/（skill 缓存）
+You> /quill:uninstall --dry-run    # 只看清单不动文件
+```
+
+默认清理范围（仅当前项目）：
+- `.quill/`（私有运行产物，已 gitignore）
+- `.quill-config.json`、`QUILL.md`（团队共享配置 / 能力索引）
+- `.gitignore` 中由首跑追加的 Quill 块（精确 3 行匹配，不动用户手写的同名 ignore）
+
+加 `--global` 额外清：`~/.claude/quill-skills/` 全局 skill bundle 缓存（**所有项目共享**，删了下次运行会自动重下）。
+
+收尾自动调：`claude plugin uninstall quill` + `claude plugin marketplace remove quill`。CLI 不在 PATH 时改为打印手动命令。
+
 ## Quickstart
 
 进入任意 git 项目（无 setup）：
 
 ```
-You> /quill prd
+You> /quill:prd
 
 # 首次运行：plugin 问 1 个问题（PRD 输出目录）
 # 选 docs/prd/<project>/（推荐）后：
@@ -53,9 +74,9 @@ You> /quill prd
 #
 # 然后走 prd-writer → hld-writer → flow-writer 三连产出
 
-You> /quill ui      # 产 sketch + ui-spec
-You> /quill dev     # 多批次开发 → 默认链式 /quill test
-You> /quill test    # 也能单独跑
+You> /quill:ui      # 产 sketch + ui-spec
+You> /quill:dev     # 多批次开发 → 默认链式 /quill:test
+You> /quill:test    # 也能单独跑
 ```
 
 ## 设计哲学
@@ -66,7 +87,7 @@ You> /quill test    # 也能单独跑
 - **Plugin 薄壳**：agent 模板 + 编排 prompt 都在 skill bundle，远端发更新即生效，不必重发 plugin。
 - **CLAUDE.md 零侵入**：不改用户 CLAUDE.md，新增 QUILL.md 作为能力索引（agent 主动读）。
 - **Skill 暗盒**：skill 不预加载、不落盘，单任务用完即弃。
-- **用户改动保护**：`/quill update-skills` 比对 sha256 跳过用户改过的文件。
+- **用户改动保护**：`/quill:update-skills` 比对 sha256 跳过用户改过的文件。
 
 ## 文件结构
 
@@ -75,9 +96,13 @@ quill-plugin/
 ├── .claude-plugin/
 │   ├── marketplace.json         # marketplace 清单（仅 1 个 plugin）
 │   └── plugin.json              # plugin manifest
-├── commands/
-│   ├── quill.md                 # /quill 入口分发器（prd|ui|dev|test）
-│   └── quill-update-skills.md
+├── commands/                    # 每个 .md = 一个 /quill:<name> slash command
+│   ├── prd.md                   # /quill:prd
+│   ├── ui.md                    # /quill:ui
+│   ├── dev.md                   # /quill:dev
+│   ├── test.md                  # /quill:test
+│   ├── update-skills.md         # /quill:update-skills
+│   └── uninstall.md             # /quill:uninstall
 ├── hooks/
 │   ├── hooks.json               # SubagentStop 注册
 │   └── quill-subagent-stop.sh   # 收集 agent ID

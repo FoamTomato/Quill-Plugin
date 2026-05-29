@@ -1,0 +1,9 @@
+# Per-user Claude Code permissions (project scope, not portable)
+.claude/
+
+# Build artifacts (CI dist/ tarballs)
+dist/
+
+# macOS / editor junk
+.DS_Store
+*.swp
