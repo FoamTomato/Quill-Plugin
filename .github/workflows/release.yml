@@ -80,7 +80,7 @@ jobs:
           LATEST_TAG="$(git tag --list 'v*' --sort=-version:refname | head -n1 || true)"
           if [ -z "$LATEST_TAG" ]; then
             # First-ever release — anchor to plugin.json's declared version (0.2.0)
-            BASE_VERSION="$(jq -r '.version' plugin.json)"
+            BASE_VERSION="$(jq -r '.version' .claude-plugin/plugin.json)"
             CUR_TAG="v${BASE_VERSION}"
             echo "No prior tag — bootstrapping at $CUR_TAG"
             # Treat as if v0.2.0 was implicitly tagged so we bump patch from there.
@@ -158,9 +158,19 @@ jobs:
           # Update plugin.json so the version we ship in the tarball matches the tag.
           # We do NOT commit this back to main — the tag is the source of truth.
           # This only modifies the working tree for the tar pack step below.
-          jq --arg v "${{ steps.version.outputs.next_version }}" '.version = $v' plugin.json > plugin.json.tmp
-          mv plugin.json.tmp plugin.json
-          echo "plugin.json now declares version ${{ steps.version.outputs.next_version }}"
+          MANIFEST=.claude-plugin/plugin.json
+          jq --arg v "${{ steps.version.outputs.next_version }}" '.version = $v' "$MANIFEST" > "$MANIFEST.tmp"
+          mv "$MANIFEST.tmp" "$MANIFEST"
+          # Also bump marketplace.json's nested plugin version so users
+          # consuming this repo as a marketplace see the right version.
+          MARKETPLACE=.claude-plugin/marketplace.json
+          if [ -f "$MARKETPLACE" ]; then
+            jq --arg v "${{ steps.version.outputs.next_version }}" \
+              '.metadata.version = $v | (.plugins[] | select(.name=="quill") | .version) = $v' \
+              "$MARKETPLACE" > "$MARKETPLACE.tmp"
+            mv "$MARKETPLACE.tmp" "$MARKETPLACE"
+          fi
+          echo "$MANIFEST now declares version ${{ steps.version.outputs.next_version }}"
 
       - name: Pack tarball
         if: steps.skip-check.outputs.skip != '1'

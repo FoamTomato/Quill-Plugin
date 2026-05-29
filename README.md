@@ -14,10 +14,27 @@ Claude Code plugin · **4-agent orchestration + PRD production** for any project
 | `/quill test` | 三维并发测试（PRD/UI/Lint）       | `.quill/runs/<BATCH>/test-reports/*` |
 | `/quill update-skills` | 升级 skill bundle（保留用户改过的文件） | 更新 `~/.claude/quill-skills/` |
 
-## Install (local dev)
+## Install
+
+### 推荐：通过 marketplace（公网用户用这个）
 
 ```bash
-claude plugin install ~/个人项目/other/quill-plugin
+# 1. 注册 marketplace（这条仓库即是 marketplace）
+claude plugin marketplace add https://github.com/FoamTomato/Quill-Plugin
+
+# 2. 安装
+claude plugin install quill@quill
+
+# 3. 后续升级
+claude plugin update quill
+```
+
+### 本地开发（plugin 作者自己用）
+
+```bash
+# 把本地路径当 marketplace（一样 add，但走文件协议）
+claude plugin marketplace add ~/个人项目/other/quill-plugin
+claude plugin install quill@quill
 ```
 
 ## Quickstart
@@ -55,7 +72,9 @@ You> /quill test    # 也能单独跑
 
 ```
 quill-plugin/
-├── plugin.json                  # plugin manifest
+├── .claude-plugin/
+│   ├── marketplace.json         # marketplace 清单（仅 1 个 plugin）
+│   └── plugin.json              # plugin manifest
 ├── commands/
 │   ├── quill.md                 # /quill 入口分发器（prd|ui|dev|test）
 │   └── quill-update-skills.md
