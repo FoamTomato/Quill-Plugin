@@ -128,6 +128,20 @@ if [ "$GLOBAL" = "1" ] && [ -d "$GLOBAL_DIR" ]; then
     rm -rf "$GLOBAL_DIR" && removed=$((removed+1))
 fi
 
+# 清 ~/.claude/agents/quill-*.md 软链（只删指向 quill-skills 的 symlink，不动用户文件）
+AGENTS_LINK_DIR="$HOME/.claude/agents"
+if [ -d "$AGENTS_LINK_DIR" ]; then
+    unlinked=0
+    for f in "$AGENTS_LINK_DIR"/quill-*.md; do
+        [ -L "$f" ] || continue
+        target="$(readlink "$f")"
+        case "$target" in
+            "$HOME/.claude/quill-skills/agents/"*) rm -f "$f" && unlinked=$((unlinked+1)) ;;
+        esac
+    done
+    [ "$unlinked" -gt 0 ] && echo "  - 已 unlink $unlinked 个 quill-*.md 软链 ($AGENTS_LINK_DIR/)" && removed=$((removed+1))
+fi
+
 echo ""
 echo "✅ 已清理 $removed 项。"
 

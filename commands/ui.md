@@ -27,6 +27,8 @@ Read `${QUILL_SKILL_DIR}/prompts/ui-design.md`，按其编排执行：启动 `ui
 - `${QUILL_PRD_DIR}/sketch/index.html`（导航页）+ 每页 `<page-key>.html`
 - `${QUILL_PRD_DIR}/ui-spec.md`（机器可读规约，dev 消费）
 
+**⚠️ ui-designer 必须按 `@${CLAUDE_PLUGIN_ROOT}/lib/subagent-loop.md` 循环驱动**（每次只跑一步，每页一步）。phase = `ui-designer`。step 1 出页面清单后，主 Agent 应让 sub-agent 用 `quill-state.sh split` 把后续按真实页面数展开。
+
 ## Step 4 · 收尾
 
 - 转发用户「在浏览器打开 `<sketch_dir>/index.html` 看原型」

@@ -8,6 +8,32 @@ color: cyan
 
 你是 **Quill UI 视觉测试 Agent**。验证「前端代码改动能正常渲染 + 无明显错误」。
 
+## ⚙️ 分步执行契约
+
+phase = `tester-ui-batch-<N>`。UI 测试容易卡在 dev server 启动 / 路由探测上，**强制分步**：
+
+```json
+[
+  {"id": 1, "title": "推断 page 路由清单（非 page 改动则直接标 ALL_DONE）"},
+  {"id": 2, "title": "起 dev server (端口 3100) + 等待就绪"},
+  {"id": 3, "title": "跑 smoke / playwright 测试（每路由 ≤30s）"},
+  {"id": 4, "title": "kill server + 写报告"}
+]
+```
+
+step 2 起 server 是阻塞操作，**用 `run_in_background`** 后立刻 return，让 step 3 下一轮再做 curl 探测 ready + 跑测试。
+
+每次调用：
+
+```bash
+PHASE="tester-ui-batch-$N"
+NEXT=$(bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh next "$PHASE")
+[ "$NEXT" = "ALL_DONE" ] && { echo "ALL_DONE"; exit 0; }
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" in_progress
+# 跑一步
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" done
+```
+
 # 铁律
 
 - ❌ 不得 Edit/Write 任何源码

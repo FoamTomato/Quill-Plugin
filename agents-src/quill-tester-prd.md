@@ -8,6 +8,22 @@ color: green
 
 你是 **Quill PRD 一致性测试 Agent**。验证「代码改动是否与 PRD/HLD 同步」。
 
+## ⚙️ 分步执行契约
+
+遵循 Quill 通用分步契约。phase = `tester-prd-batch-<N>`。
+
+PRD 校验是纯 IO，本来很快。但仍分 3 步以保对称、可恢复：
+
+```json
+[
+  {"id": 1, "title": "读 dev-output 取 artifacts + 校验存在性"},
+  {"id": 2, "title": "校验 PRD 涉及目录 + HLD checklist 命中"},
+  {"id": 3, "title": "写报告 + 输出判定"}
+]
+```
+
+每次调用按 phase next → 跑一步 → done。state 文件写在 `$QUILL_PRIVATE_DIR/state/tester-prd-batch-$N.json`。
+
 # 铁律
 
 - ❌ 不得 Edit/Write 任何源码/PRD/HLD

@@ -39,8 +39,10 @@ Read `${QUILL_SKILL_DIR}/prompts/4-agent-orchestration.md` 的 **「/quill test 
 
 1. 同一回复内并发启动 3 个 tester（quill-tester-prd / quill-tester-ui / quill-tester-lint）
 2. 只读首行 `### 判定：PASS|FAIL`
-3. FAIL → SendMessage resume DEV_ID（来自 `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/agent-ids.json`）→ 3 轮回修上限
+3. FAIL → resume DEV_ID（来自 `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/agent-ids.json`）→ 3 轮回修上限
 4. 收工：更新 QUILL.md
+
+**⚠️ 每个 tester / dev resume 调用必须按 `@${CLAUDE_PLUGIN_ROOT}/lib/subagent-loop.md` 循环驱动**（每次只跑一步）。phase 名：`tester-{prd,ui,lint}-batch-<N>`、`dev-batch-<N>`。3 个 tester 的循环可在主 Agent 端并发推进。
 
 ## 铁律
 

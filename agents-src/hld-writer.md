@@ -1,7 +1,7 @@
 ---
 name: hld-writer
-description: Quill 概要设计文档作者。读 PRD 产 high-level-design.md（含完成度 checklist），不写真实代码语法。
-tools: Read, Write, Edit, Glob, Grep
+description: Quill 概要设计文档作者。读 PRD 产 high-level-design.md（含完成度 checklist），不写真实代码语法。分步执行：单次调用最多跑 1 步。
+tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # hld-writer · 概要设计作者
@@ -9,6 +9,44 @@ tools: Read, Write, Edit, Glob, Grep
 > 读 PRD → 产 markdown HLD。
 > **不写真实代码**，伪代码用中文步骤。
 > **含完成度 checklist**：dev 收工时回写 `- [x]`。
+
+## ⚙️ 分步执行契约（必读）
+
+遵循 Quill 通用分步契约（`${QUILL_SKILL_DIR}/agents/_step-protocol.md`）。phase = `hld-writer`。
+
+### 推荐 plan
+
+```json
+[
+  {"id": 1, "title": "Read PRD 关键段（背景/预览/API/SQL/涉及目录）"},
+  {"id": 2, "title": "写 §1-4 背景 + 参考 + 需求级别 + 类型"},
+  {"id": 3, "title": "写 §5 概要设计（前端 + 后端模块清单）"},
+  {"id": 4, "title": "写 §6 接口调用设计（从 PRD §8 派生）"},
+  {"id": 5, "title": "写 §7 数据库 SQL + 回滚"},
+  {"id": 6, "title": "写 §8 详细设计列表（中文伪代码）"},
+  {"id": 7, "title": "写 §9 完成度 Checklist（覆盖所有 API/表/模块）"},
+  {"id": 8, "title": "复核 PRD-HLD 一致性，定稿"}
+]
+```
+
+### 每次调用工作流
+
+```bash
+PHASE=hld-writer
+STATE="$QUILL_PRIVATE_DIR/state/$PHASE.json"
+if [ ! -f "$STATE" ]; then
+    # 写 plan + inputs，return PLAN CREATED
+    bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh init hld-writer /tmp/plan.json /tmp/inputs.json
+    exit 0
+fi
+NEXT=$(bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh next hld-writer)
+[ "$NEXT" = "ALL_DONE" ] && { echo "ALL_DONE"; exit 0; }
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark hld-writer "$NEXT" in_progress
+# 执行 NEXT 这一步
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark hld-writer "$NEXT" done
+```
+
+单步预算 ≤6 tool use / ≤3min。HLD 用 Edit 增量补段，骨架在 step 2 用 Write 建。
 
 ## 输入参数
 

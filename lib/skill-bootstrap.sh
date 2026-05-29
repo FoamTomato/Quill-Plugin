@@ -14,7 +14,15 @@
 set -e
 
 LOCAL_DIR="$HOME/.claude/quill-skills"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$HOME/个人项目/other/quill-plugin}"
+# PLUGIN_ROOT 兜底：claude-code 注入 → plugin 缓存最新版 → 当前 pwd（dev）
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -d "$CLAUDE_PLUGIN_ROOT" ]; then
+    PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
+else
+    PLUGIN_ROOT=$(ls -1d "$HOME"/.claude/plugins/cache/*/quill/*/ 2>/dev/null \
+                    | sort -V | tail -1 | sed 's:/*$::')
+    [ -z "$PLUGIN_ROOT" ] && [ -f ./.claude-plugin/plugin.json ] && PLUGIN_ROOT="$(pwd)"
+fi
+[ -z "$PLUGIN_ROOT" ] && { echo "ERROR: cannot resolve plugin root" >&2; exit 2; }
 DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
 FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
 
@@ -87,6 +95,38 @@ fi
 if [ -d "$PLUGIN_ROOT/prompts-src" ]; then
     mkdir -p "$LOCAL_DIR/prompts"
     rsync -a --delete "$PLUGIN_ROOT/prompts-src/" "$LOCAL_DIR/prompts/"
+fi
+
+# --- 2.5 把 agent 文件软链到 ~/.claude/agents/ -------------------------------
+# Claude Code 只扫 ~/.claude/agents/ 和 <project>/.claude/agents/ 来注册 subagent_type，
+# 所以这里给每个 agent md 建一条 quill-<name>.md 软链，让它们出现在 Agent 工具的可选列表里。
+# 用前缀隔离命名空间，uninstall 时按前缀 unlink。
+if [ -d "$LOCAL_DIR/agents" ]; then
+    AGENTS_LINK_DIR="$HOME/.claude/agents"
+    mkdir -p "$AGENTS_LINK_DIR"
+    linked=0
+    for src in "$LOCAL_DIR"/agents/*.md; do
+        [ -f "$src" ] || continue
+        base="$(basename "$src")"
+        # 下划线开头的是共享 reference（如 _step-protocol.md），不当 agent 注册
+        case "$base" in _*) continue ;; esac
+        dst="$AGENTS_LINK_DIR/quill-$base"
+        # 已存在且是指向我们 bundle 的符号链接 → 跳过；指向别处或是普通文件 → 不动，避免覆盖用户的
+        if [ -L "$dst" ]; then
+            current="$(readlink "$dst")"
+            if [ "$current" = "$src" ]; then
+                continue
+            fi
+            ln -sfn "$src" "$dst"
+        elif [ -e "$dst" ]; then
+            echo "[skill-bootstrap]   skip $dst (exists, not our symlink)" >&2
+            continue
+        else
+            ln -s "$src" "$dst"
+        fi
+        linked=$((linked+1))
+    done
+    echo "[skill-bootstrap] linked $linked agent(s) into $AGENTS_LINK_DIR/ (prefix: quill-)" >&2
 fi
 
 # --- 3. 写 manifest.json -----------------------------------------------------

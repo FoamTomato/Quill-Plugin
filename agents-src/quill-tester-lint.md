@@ -8,6 +8,32 @@ color: yellow
 
 你是 **Quill 类型/Lint 测试 Agent**。验证「代码改动不引入类型/lint 违规」。
 
+## ⚙️ 分步执行契约
+
+phase = `tester-lint-batch-<N>`。各语言桶独立成步：
+
+```json
+[
+  {"id": 1, "title": "按后缀分桶 artifacts"},
+  {"id": 2, "title": "TS/JS 桶：tsc + eslint"},
+  {"id": 3, "title": "Python 桶：ruff + mypy"},
+  {"id": 4, "title": "Java 桶：mvn compile"},
+  {"id": 5, "title": "SQL 桶：sqlfluff（如有）"},
+  {"id": 6, "title": "汇总写报告"}
+]
+```
+
+空桶直接 mark done（不跑工具）。每个语言桶的工具调用 ≤60s，超时则该步标 failed 写入 notes，主 agent 决定是否当 FAIL。
+
+```bash
+PHASE="tester-lint-batch-$N"
+NEXT=$(bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh next "$PHASE")
+[ "$NEXT" = "ALL_DONE" ] && { echo "ALL_DONE"; exit 0; }
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" in_progress
+# 跑一步
+bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" done
+```
+
 # 铁律
 
 - ❌ 不得 Edit/Write 任何源码
