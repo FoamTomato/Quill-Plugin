@@ -1,19 +1,49 @@
 # quill-plugin
 
-Claude Code plugin · **4-agent orchestration + PRD production** for any project.
+Claude Code plugin · **单一职责拆分的研发流命令集 + 动态编排器** for any project.
 
-跑一次 `claude plugin install`，在任意项目里以 ≤ 1 个问题的代价跑通：需求理解 / UI 原型 / 多批次开发 / 三维并发测试。
+跑一次 `claude plugin install`，在任意项目里以 ≤ 1 个问题的代价跑通：需求理解 / 概要设计 / UI 风格 / 多批次开发 / 测试。
 
-## 4 个能力（subcommand）
+## 命令总览
 
-| 入口 | 作用 | 产物 |
+每个命令**职责单一、互不强耦合**：缺前置产物不报错，按可得来源降级运行。
+
+### 文档生产
+
+每个命令**只产 1 件**，全部 **单次调用一把出**。
+
+| 入口 | 产物 | 何时用 |
 |---|---|---|
-| `/quill:prd`  | 理解需求 + 整理边界 + 给用户讲解 | `product-requirements.md` / `high-level-design.md` / `flow.drawio` |
-| `/quill:ui`   | 前端 UI 设计                      | `sketch/*.html` + `ui-spec.md` |
-| `/quill:dev`  | 多批次开发编排（默认链式 test）   | `.quill/runs/<BATCH>/dev-output.md` |
-| `/quill:test` | 三维并发测试（PRD/UI/Lint）       | `.quill/runs/<BATCH>/test-reports/*` |
-| `/quill:update-skills` | 升级 skill bundle（保留用户改过的文件） | 更新 `~/.claude/quill-skills/` |
-| `/quill:uninstall` | 卸载（清当前项目产物 + 可选清全局缓存 + 调 claude CLI 卸 plugin） | 见 [Uninstall](#uninstall) |
+| `/quill:prd`      | `product-requirements.md`（完整 9 段详细） | 正式项目、需要 API 契约 / DB schema |
+| `/quill:prd-lite` | `requirement-<slug>.md`（需求精炼：检索现有上下文 → 2 段短需求文档） | 一句话需求、想结合现有项目说清再开干 |
+| `/quill:hld`      | `high-level-design.md`（9 段 + 详细伪代码 + 4 类 checklist） | 多人协作、dev 需要回写 checklist |
+| `/quill:hld-lite` | `high-level-design.md`（实现步骤 + 关键流程伪代码 + 极小 checklist） | 单人开发、快速原型 |
+| `/quill:flow`     | `flow.drawio`（3-6 张业务流程图，40px 网格布局） | 业务流程需要可视化、给非技术干系人看 |
+
+依赖关系：`/quill:hld` 需先跑过 `/quill:prd`；`/quill:hld-lite` 可吃 full PRD / prd-lite 精简需求 / 口述文字；`/quill:flow` 支持 `--no-prd` 从 CLAUDE.md / README 推断。
+
+### UI 风格
+
+| 入口 | 作用 |
+|---|---|
+| `/quill:ui` | **UI 风格 skill 工厂**：扫描现有代码 / 选内置风格 / 总结自有风格 → 存成可复用 `style/<slug>` skill，dev 写前端时自动复用 |
+
+### 开发与测试
+
+| 入口 | 作用 |
+|---|---|
+| `/quill:dev`      | 多批次开发编排（planner + dev；**默认不测**，`--then-test` 才链式） |
+| `/quill:dev-lite` | skill 驱动开发（核心 skill **5-16 个**），**不强制 PRD**，`--review` 自检 |
+| `/quill:test`     | 三维测试（PRD/UI/Lint）；无批次时走 **git-diff 模式**测未提交改动 |
+| `/quill:test-lite`| 核心轻量测试（只测未提交改动，无批次/无回修 loop） |
+| `/quill:run`      | **动态编排器**：auto-judge 进度，动态调度 planner/dev/test，≤3 子 agent 并发 |
+
+### 工具命令
+
+| 入口 | 作用 |
+|---|---|
+| `/quill:update-skills` | 升级 skill bundle（保留用户改过的文件） |
+| `/quill:uninstall`     | 卸载 |
 
 ## Install
 
@@ -72,11 +102,12 @@ You> /quill:prd
 #   - 自动在项目根写 QUILL.md（能力清单 + 完成度看板）
 #   - 自动追加 .gitignore：.quill/
 #
-# 然后走 prd-writer → hld-writer → flow-writer 三连产出
+# 然后按需逐步产出：PRD → HLD → flow → UI 风格 → dev → test（每步独立，缺前置不报错）
 
-You> /quill:ui      # 产 sketch + ui-spec
-You> /quill:dev     # 多批次开发 → 默认链式 /quill:test
-You> /quill:test    # 也能单独跑
+You> /quill:ui      # UI 风格 skill 工厂：存成可复用 style skill
+You> /quill:dev     # 多批次开发（默认不测）
+You> /quill:test    # 三维测试（或 /quill:test-lite 测未提交改动）
+You> /quill:run     # 也可：动态编排器，按进度自动调度 planner/dev/test
 ```
 
 ## 设计哲学
@@ -97,10 +128,17 @@ quill-plugin/
 │   ├── marketplace.json         # marketplace 清单（仅 1 个 plugin）
 │   └── plugin.json              # plugin manifest
 ├── commands/                    # 每个 .md = 一个 /quill:<name> slash command
-│   ├── prd.md                   # /quill:prd
-│   ├── ui.md                    # /quill:ui
-│   ├── dev.md                   # /quill:dev
-│   ├── test.md                  # /quill:test
+│   ├── prd.md                   # /quill:prd        — 完整 PRD
+│   ├── prd-lite.md              # /quill:prd-lite   — 需求精炼器
+│   ├── hld.md                   # /quill:hld        — 完整 HLD
+│   ├── hld-lite.md              # /quill:hld-lite   — 实现步骤 + 关键伪代码
+│   ├── flow.md                  # /quill:flow       — 业务流程图
+│   ├── ui.md                    # /quill:ui         — UI 风格 skill 工厂
+│   ├── dev.md                   # /quill:dev        — 多批次开发（默认不测）
+│   ├── dev-lite.md              # /quill:dev-lite   — skill 驱动开发（5-16 个）
+│   ├── test.md                  # /quill:test       — 三维测试（含 git-diff 模式）
+│   ├── test-lite.md             # /quill:test-lite  — 核心轻量测试
+│   ├── run.md                   # /quill:run        — 动态编排器
 │   ├── update-skills.md         # /quill:update-skills
 │   └── uninstall.md             # /quill:uninstall
 ├── hooks/
@@ -112,23 +150,30 @@ quill-plugin/
 │   ├── skill-bootstrap.sh       # 首次下载 skill bundle
 │   ├── skill-update.sh          # 增量更新（含用户改动保护）
 │   ├── build-skill-index.sh     # skills/ → index/*.json
-│   ├── skill-pick.sh            # 按阶段 + 主题选 skill
-│   ├── skill-match.sh           # 按文件路径反查 skill
-│   └── skill-get.sh             # 取 skill 全文
-├── agents-src/                  # 9 个 agent 模板（打包进 skill bundle）
-│   ├── prd-writer.md
-│   ├── hld-writer.md
-│   ├── flow-writer.md
-│   ├── ui-designer.md
-│   ├── quill-planner.md
-│   ├── quill-dev.md
-│   ├── quill-tester-prd.md
-│   ├── quill-tester-ui.md
-│   └── quill-tester-lint.md
-├── prompts-src/                 # 3 个编排 prompt（打包进 skill bundle）
+│   ├── skill-pick.sh            # 按阶段 + 主题选 skill（支持 --min/--max）
+│   ├── skill-match.sh           # 按文件路径反查 skill（支持 --min/--max）
+│   ├── skill-get.sh             # 取 skill 全文
+│   └── quill-detect.sh          # 进度探针（/quill:run 的 auto-judge 数据源）
+├── agents-src/                  # agent 模板（打包进 skill bundle，命名 <阶段>-<角色>[-<变体>]）
+│   ├── prd-writer-full.md       # 完整 PRD
+│   ├── prd-writer-lite.md       # 需求精炼器（产 requirement-*.md）
+│   ├── hld-writer-full.md       # 完整 HLD（9 段 + 伪代码）
+│   ├── hld-writer-lite.md       # 精简 HLD（步骤 + 关键伪代码）
+│   ├── flow-writer.md           # 流程图（40px 网格布局）
+│   ├── ui-style-author.md       # UI 风格 skill 工厂
+│   ├── dev-planner.md           # 拆批次 + 设计指引 + skill 路径
+│   ├── dev-coder.md             # 多批次写代码 + 回写 checklist
+│   ├── test-tester-prd.md       # PRD/HLD 一致性测试
+│   ├── test-tester-ui.md        # UI 视觉冒烟测试
+│   ├── test-tester-lint.md      # 类型/lint 测试
+│   └── _step-protocol.md        # 子 agent 分步执行契约（共享，不注册为 agent）
+├── prompts-src/                 # 编排 prompt（打包进 skill bundle）
 │   ├── prd-production.md
-│   ├── ui-design.md
-│   └── 4-agent-orchestration.md
+│   ├── prd-lite-production.md    # 需求精炼编排
+│   ├── hld-production.md         # full（严格）+ lite（回退链）
+│   ├── ui-style.md              # UI 风格 skill 工厂编排
+│   ├── orchestrate.md           # /quill:run 路由大脑（R0-R9 + 并发协议）
+│   └── 4-agent-orchestration.md # dev/test 内循环（默认不链式 test）
 └── templates/
     └── QUILL.md.tpl
 ```
@@ -142,15 +187,3 @@ skill 库本体维护在独立仓库 [Prompts-MCP](https://github.com/foamtomato
 | GitHub `foamtomato/prompts-mcp` | skill 真源 + PR 评审 |
 | `xiaohang.site/skills/` | 人浏览 + plugin 自动更新分发源 |
 | `~/.claude/quill-skills/` | 用户本地缓存（plugin 运行时唯一源） |
-
-## Status
-
-v0.2.0 (P1–P6 实现完成，P7 发布中)
-
-- ✅ P1 骨架：plugin.json / commands / lib/config-*.sh / QUILL.md.tpl
-- ✅ P2 Skill 暗盒：5 个 shell 脚本，index 三表
-- ✅ P3 PRD 链路：prd-writer / hld-writer / flow-writer
-- ✅ P4 UI 链路：ui-designer + antd MCP 集成
-- ✅ P5 4-Agent 搬运：planner / dev / 3 tester 解耦
-- ✅ P6 自动更新 + 用户改动保护
-- 🔄 P7 团队复用 + 发布

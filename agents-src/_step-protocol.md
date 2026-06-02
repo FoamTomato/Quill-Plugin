@@ -1,13 +1,20 @@
 ---
 name: _step-protocol
-description: Quill 子 agent 通用分步执行契约。所有长任务 agent（prd-writer / hld-writer / flow-writer / ui-designer / quill-dev / quill-tester-*）必须遵守。
+description: Quill 子 agent 通用分步执行契约。所有长任务 agent（dev-coder / dev-planner / test-tester-*）必须遵守。
 ---
 
 # Quill 分步执行契约（共享规范）
 
 ## 为什么存在
 
-Sub-agent 在 socket 上单次跑超过 ~5 分钟 / 12 次 tool use 容易被切。一次大任务（PRD 全文、一批 dev 任务）必须**自己拆成 ≤10 个小步**，每次调用只跑 1 步就 return，由父 agent 循环再次调用推进。断了能从 state.json 续。
+Sub-agent 在 socket 上单次跑超过 ~5 分钟 / 12 次 tool use 容易被切。**真长任务**（dev-coder 一批多文件 / tester 多目录）需要拆成小步，断了能从 state.json 续。
+
+## ⚠️ 何时该用本契约
+
+- ✅ **该用**：dev-coder / dev-planner / test-tester-* —— 真多任务
+- ❌ **不该用**：prd-writer-full / hld-writer-full / hld-writer-lite / prd-writer-lite / flow-writer / ui-style-author —— 这些任务单次 3 分钟内能完成，分步只是徒增 8 倍 overhead
+
+简单 agent 默认单次调用一把出；只有当 prompt 里显式带 `mode=stepwise` 时才回退到本契约。详见各 agent 文件顶部的「执行模式」段。
 
 ## 状态文件位置
 
@@ -15,25 +22,24 @@ Sub-agent 在 socket 上单次跑超过 ~5 分钟 / 12 次 tool use 容易被切
 ${QUILL_PRIVATE_DIR}/state/<phase>.json
 ```
 
-`<phase>` 取值：`prd-writer` / `hld-writer` / `flow-writer` / `ui-designer` / `dev-batch-<N>` / `tester-prd` / `tester-ui` / `tester-lint`。
+`<phase>` 取值：`planner-<BATCH_ID>` / `dev-batch-<N>` / `tester-prd-batch-<N>` / `tester-ui-batch-<N>` / `tester-lint-batch-<N>`。
 
 ## state.json 格式
 
 ```json
 {
-  "phase": "prd-writer",
+  "phase": "prd-writer-full",
   "version": 1,
   "created_at": "2026-05-29T12:00:00Z",
   "updated_at": "2026-05-29T12:03:00Z",
   "plan": [
     {"id": 1, "title": "识别模式 + 读 outline/source", "status": "done"},
-    {"id": 2, "title": "写 §1-2 背景与用户", "status": "done"},
-    {"id": 3, "title": "写 §3-5 需求设计预览/明细", "status": "in_progress"},
-    {"id": 4, "title": "写 §6-7 功能/非功能",      "status": "pending"},
-    {"id": 5, "title": "写 §8 API 契约",          "status": "pending"},
-    {"id": 6, "title": "写 §9 数据库 schema",     "status": "pending"},
-    {"id": 7, "title": "写 §10 涉及目录",         "status": "pending"},
-    {"id": 8, "title": "写 §11-12 验收 + ChangeLog", "status": "pending"}
+    {"id": 2, "title": "写 §一-三 背景/预览/明细", "status": "done"},
+    {"id": 3, "title": "写 §四 API 契约",          "status": "in_progress"},
+    {"id": 4, "title": "写 §五 数据库 schema",     "status": "pending"},
+    {"id": 5, "title": "写 §六 涉及目录",          "status": "pending"},
+    {"id": 6, "title": "写 §七-九 功能/流程/验收", "status": "pending"},
+    {"id": 7, "title": "写 §十 Change Log + 自检", "status": "pending"}
   ],
   "cursor": 3,
   "inputs": { "prd_path": "...", "source": "...", "outline": "..." },
@@ -91,7 +97,7 @@ ${QUILL_PRIVATE_DIR}/state/<phase>.json
 
 ## 父 agent 怎么驱动
 
-父 agent（quill-dev 或主 command）伪代码：
+父 agent（dev-coder 或主 command）伪代码：
 
 ```
 while true:

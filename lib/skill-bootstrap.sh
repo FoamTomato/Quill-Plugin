@@ -53,7 +53,8 @@ if [ -n "$LOCAL_SRC" ]; then
         echo "ERROR: $LOCAL_SRC/skills not found" >&2
         exit 1
     fi
-    rsync -a --delete "$LOCAL_SRC/skills/" "$LOCAL_DIR/skills/"
+    # --exclude=style/：保护用户用 /quill:ui 作者化的本地风格 skill 不被上游同步删掉
+    rsync -a --delete --exclude='style/' "$LOCAL_SRC/skills/" "$LOCAL_DIR/skills/"
     SRC_USED="local:$LOCAL_SRC"
 else
     BUNDLE="$TMP_DIR/bundle.tar.gz"
@@ -83,7 +84,8 @@ else
         echo "ERROR: skills/ not found in bundle" >&2
         exit 1
     fi
-    rsync -a --delete "$SKILLS_SRC/" "$LOCAL_DIR/skills/"
+    # --exclude=style/：同上，保护本地风格 skill
+    rsync -a --delete --exclude='style/' "$SKILLS_SRC/" "$LOCAL_DIR/skills/"
 fi
 
 # --- 2. 合并 plugin 自带的 agents-src / prompts-src ----------------------------
@@ -104,6 +106,16 @@ fi
 if [ -d "$LOCAL_DIR/agents" ]; then
     AGENTS_LINK_DIR="$HOME/.claude/agents"
     mkdir -p "$AGENTS_LINK_DIR"
+    # 先清理悬空死链：若某 quill-<name>.md 软链指向已不存在的源（agent 改名/删除后），
+    # 删之免得 Claude 注册到坏 agent。
+    pruned=0
+    for link in "$AGENTS_LINK_DIR"/quill-*.md; do
+        [ -L "$link" ] || continue
+        if [ ! -e "$link" ]; then          # 符号链接的目标已不存在
+            rm -f "$link"; pruned=$((pruned+1))
+        fi
+    done
+    [ "$pruned" -gt 0 ] && echo "[skill-bootstrap] pruned $pruned dead agent symlink(s)" >&2
     linked=0
     for src in "$LOCAL_DIR"/agents/*.md; do
         [ -f "$src" ] || continue

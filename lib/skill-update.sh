@@ -17,7 +17,14 @@
 set -e
 
 LOCAL_DIR="$HOME/.claude/quill-skills"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$HOME/个人项目/other/quill-plugin}"
+if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -d "$CLAUDE_PLUGIN_ROOT" ]; then
+    PLUGIN_ROOT="$CLAUDE_PLUGIN_ROOT"
+else
+    PLUGIN_ROOT=$(ls -1d "$HOME"/.claude/plugins/cache/*/quill/*/ 2>/dev/null \
+                    | sort -V | tail -1 | sed 's:/*$::')
+    [ -z "$PLUGIN_ROOT" ] && [ -f ./.claude-plugin/plugin.json ] && PLUGIN_ROOT="$(pwd)"
+fi
+[ -z "$PLUGIN_ROOT" ] && { echo "ERROR: cannot resolve plugin root" >&2; exit 2; }
 DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
 FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
 VERSION_URL="https://xiaohang.site/skills/version.txt"

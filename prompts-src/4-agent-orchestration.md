@@ -1,13 +1,16 @@
 # /quill dev / /quill test 编排（4-Agent）
 
-> `/quill dev` 入口 → 走完整 4-Agent 循环（planner → dev → 3 tester 并发 → FAIL 回修，默认链式 test）
-> `/quill test` 入口 → 只跑 3 tester 并发（必须指定 `--batch <ID>` 或自动用最新批次）
+> `/quill dev` 入口 → planner → dev 多批次循环。**默认不链式 test**；要测请跑 `/quill:test` 或用编排器 `/quill:run`。
+> `/quill test` 入口 → 只跑 3 tester 并发。编排层先把 artifacts 来源归一（`--batch <ID>` / 自动最新批次 → dev-output.md；无批次 → git diff），**tester 只收 `artifacts` 文件列表，不知来源**。
+> `/quill:run` 编排器复用本文件的 Phase 1（planner）+ Phase 2 Step 2.1（dev）+ Step 2.2-2.3（test）作为各 unit 的内循环。
+>
+> Step 2.2/2.3（测试）受 `RUN_TEST` 控制：`/quill dev` 默认 `RUN_TEST=0`（跳过）；`/quill:run` 的 test stage 或 `/quill dev --then-test` 才置 1。
 
 ---
 
 ## 主 Agent 五条铁律
 
-1. **主 Agent 不写代码** — 任何源码编辑必须经 quill-dev sub-agent
+1. **主 Agent 不写代码** — 任何源码编辑必须经 dev-coder sub-agent
 2. **上下文整洁** — sub-agent 之间只传文件路径与 PASS/FAIL 标记
 3. **时序日志强制** — append 到 `${QUILL_PRIVATE_DIR}/runs/<BATCH_ID>/main-log.md`，格式 `[yymmdd hhmm] <event>`
 4. **主动反馈** — 每完成一批 < 8 行进度总结
@@ -22,14 +25,21 @@
 
 ---
 
-## 前置校验
+## 软探测输入（缺前置产物不报错退出）
 
-`/quill dev` 启动时：
+`/quill dev` 启动时**按优先级探测，缺啥降级，绝不 exit**：
 
 ```bash
-[ -f "${QUILL_PRD_DIR}/product-requirements.md" ] || { echo "❌ 缺 PRD，请先 /quill prd"; exit 1; }
-[ -f "${QUILL_PRD_DIR}/high-level-design.md" ]     || { echo "❌ 缺 HLD，请先 /quill prd"; exit 1; }
+PRD="${QUILL_PRD_DIR}/product-requirements.md"
+HLD="${QUILL_PRD_DIR}/high-level-design.md"
+REQ=$(ls -1t "${QUILL_PRD_DIR}"/requirement-*.md 2>/dev/null | head -1)
+[ -f "$PRD" ] && SRC="$PRD" || SRC="$REQ"   # SRC 可能为空 → 用 task_source 口述
+HAS_HLD=0; [ -f "$HLD" ] && HAS_HLD=1
 ```
+
+- 有 PRD → planner 用 PRD 拆批次；无 PRD 有 `requirement-*.md` → 用它；都无 → 用 `task_source`（口述/Issue）。
+- 有 HLD → dev 回写 §九 checklist；**无 HLD → 照常开发，跳过 checklist 回写**，planner 自行从需求/代码推断任务粒度。
+- 三者全无且无 task_source → 询问一句话需求，**不退出**。
 
 ---
 
@@ -43,7 +53,7 @@
 
 0.3 写 `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/main-log.md` 头部（BATCH_ID / 起始时间 / 任务来源）
 
-0.4 给用户确认 1 行：「将启动 4-Agent 编排（planner → dev → 3 tester），预计 5-15 次 sub 调用。继续? [y/n]」
+0.4 给用户确认 1 行：「将启动 planner → dev 多批次开发（不含测试，测试请用 /quill:test 或 /quill:run）。继续? [y/n]」
 
 ---
 
@@ -51,23 +61,25 @@
 
 ```
 Agent(
-  subagent_type="quill-planner",
+  subagent_type="dev-planner",
   description="Plan batch",
   prompt="""BATCH_ID=$BATCH_ID
-prd_path=$QUILL_PRD_DIR/product-requirements.md
-hld_path=$QUILL_PRD_DIR/high-level-design.md
-ui_spec=$QUILL_PRD_DIR/ui-spec.md
-task_source=<Issue 号 / 自由文本>
+prd_path=$SRC                       # PRD 或 requirement-*.md，可能为空
+hld_path=$HLD                       # 可能不存在；不存在则不回写 checklist
+task_source=<Issue 号 / 自由文本 / 口述>   # prd_path 为空时的兜底需求来源
 """
 )
 ```
 
-planner 返回 3 个绝对路径：
+> planner 必须容忍 `prd_path` / `hld_path` 为空或不存在：缺 PRD 用 `task_source` 拆批次；缺 HLD 不产 checklist 引用、按需求粒度切任务。
+
+planner 返回 4 个绝对路径：
 - `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-plan.md`
 - `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/page-design-guide.md`
 - `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt`
+- `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/authorized-paths.txt` —— **dev 授权范围的单一来源**，dev-coder 与 tester-prd 都认它
 
-主 Agent **不读这 3 个文件的内容**，把路径写入 main-log，进 Phase 2。
+主 Agent **不读这 4 个文件的内容**，把路径写入 main-log，进 Phase 2。
 
 ---
 
@@ -83,13 +95,14 @@ TOTAL_BATCHES=$(grep "^## Batch" ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-plan.md
 
 ```
 Agent(
-  subagent_type="quill-dev",
+  subagent_type="dev-coder",
   description="Dev batch N",
   prompt="""BATCH_ID=$BATCH_ID
 batch 编号=N
 dev-plan: ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-plan.md (Batch N 段)
 design-guide: ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/page-design-guide.md
 skills: ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt
+authorized-paths: ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/authorized-paths.txt   # 可改文件唯一授权
 prd_path: $QUILL_PRD_DIR/product-requirements.md
 hld_path: $QUILL_PRD_DIR/high-level-design.md
 完成后 append artifacts 到 ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md
@@ -114,11 +127,22 @@ find ~/.claude/projects/ -name "agent-*.meta.json" -print0 2>/dev/null \
 
 ### Step 2.2 · 三维并发测试（同一回复内三个 Agent call）
 
-并发启动（**不要顺序调**）：
+> ⚠️ **仅当 `RUN_TEST=1` 才跑 Step 2.2 + 2.3**。`/quill dev` 默认 `RUN_TEST=0` → dev 收工即进 Step 2.4，**不测**。
+> 测试由 `/quill:test`（独立路径）或 `/quill:run` 的 test stage 触发。
 
-- quill-tester-prd  → `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/test-reports/prd/batch-N.md`
-- quill-tester-ui   → `... /ui/batch-N.md`
-- quill-tester-lint → `... /lint/batch-N.md`
+**先归一 artifacts（编排层职责，tester 只收文件列表）**：
+
+```bash
+# 从本批 dev-output.md 解析 artifacts（tester 不再自己读 dev-output）
+DEV_OUTPUT="${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md"
+ARTIFACTS=$(awk '/^- artifacts:/{f=1;next} f&&/^  - /{print $2} f&&/^- /&&!/^- artifacts:/{f=0}' "$DEV_OUTPUT" | sort -u)
+```
+
+并发启动（**不要顺序调**），每个 tester 传 `artifacts=$ARTIFACTS`：
+
+- test-tester-prd  → `artifacts` + `prd_path` + `hld_path` + `authorized_paths_path=${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/authorized-paths.txt`（授权校验单一来源，与 dev-coder 同源）+ `dev_output_path=$DEV_OUTPUT`（供 checklist 命中校验取本批任务名）→ `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/test-reports/prd/batch-N.md`
+- test-tester-ui   → `artifacts` + 可选 `ui_spec` → `... /ui/batch-N.md`
+- test-tester-lint → `artifacts` → `... /lint/batch-N.md`
 
 主 Agent **只读首行**：
 
@@ -169,7 +193,7 @@ TESTER_*_ID 保留复用（同会话 resume 比新启省 token）。
 
 ## Phase 3 · 收工
 
-3.1 主 Agent **不**碰 PRD/HLD 同步（已下沉到 quill-dev 收尾职责）
+3.1 主 Agent **不**碰 PRD/HLD 同步（已下沉到 dev-coder 收尾职责）
 
 3.2 更新 `QUILL.md`：
 - 「能力清单」`/quill dev` `/quill test` 状态改 ✅
@@ -180,23 +204,42 @@ TESTER_*_ID 保留复用（同会话 resume 比新启省 token）。
 
 ---
 
-## `/quill test` 独立路径
+## `/quill test` 独立路径（编排层归一 artifacts 来源：批次 dev-output / 未提交 git diff）
 
-`/quill test --batch <ID>`（不传 ID 则用最新批次）：
+`/quill test`：以 `RUN_TEST=1` 直接进 Step 2.2（三维并发测试）+ Step 2.3（修正循环）。**Phase 0/1 跳过**。
+
+**编排层先把两种来源归一成 `ARTIFACTS`，再 fan-out**（tester 只收文件列表，不知道也不关心来源）：
 
 ```bash
-BATCH_ID="${1:-$(ls -1t ${QUILL_PRIVATE_DIR}/runs/ | head -1)}"
-[ -d "${QUILL_PRIVATE_DIR}/runs/$BATCH_ID" ] || { echo "❌ 批次 $BATCH_ID 不存在"; exit 1; }
-[ -f "${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md" ] || { echo "❌ 该批次未跑过 dev"; exit 1; }
+BATCH_ID="${1:-$(ls -1t ${QUILL_PRIVATE_DIR}/runs/ 2>/dev/null | head -1)}"
+DEV_OUTPUT="${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md"
+
+if [ -n "$BATCH_ID" ] && [ -f "$DEV_OUTPUT" ]; then
+    # batch 来源：从 dev-output.md 解析 artifacts；checklist 校验可比对本批任务名
+    ARTIFACTS=$(awk '/^- artifacts:/{f=1;next} f&&/^  - /{print $2} f&&/^- /&&!/^- artifacts:/{f=0}' "$DEV_OUTPUT" | sort -u)
+    DEV_OUTPUT_ARG="$DEV_OUTPUT"   # 传给 prd tester 做 checklist 命中校验
+    AUTH_ARG="${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/authorized-paths.txt"   # 授权校验单一来源
+else
+    # git-diff 来源：未提交改动；无 dev-output / authorized-paths → 相应校验降级
+    ARTIFACTS=$( { git diff --name-only; git diff --cached --name-only; } 2>/dev/null | sort -u )
+    [ -z "$ARTIFACTS" ] && { echo "✅ 无未提交改动，无需测试"; exit 0; }
+    DEV_OUTPUT_ARG=""             # 不传 → prd tester 跳过 checklist 命中校验
+    AUTH_ARG=""                   # 不传 → prd tester 退回 PRD「涉及目录」段（PRD 在才校验）
+    BATCH_ID="gitdiff-$(date +%y%m%d)"   # 占位 ID，仅用于报告落盘
+fi
 ```
 
-直接进 Step 2.2（三维并发测试） + Step 2.3（修正循环）。**Phase 0/1 跳过**。
+三个 tester 一律收 `artifacts=$ARTIFACTS`（prd 额外收 `prd_path`/`hld_path`/可选 `authorized_paths_path=$AUTH_ARG`/可选 `dev_output_path=$DEV_OUTPUT_ARG`，ui 额外收可选 `ui_spec`）。各 tester 内部该跳过的自然降级：prd 在授权来源（authorized-paths 或 PRD 段）缺省时跳过授权校验、PRD/HLD 缺省时跳过一致性、`dev_output_path` 缺省时跳过 checklist 命中；ui 无前端文件直接 PASS。
+修正循环：有 dev `DEV_ID` 可 resume 则回修；纯 git-diff（无 dev agent）则只报告 punch list、不自动回修。
 
 ---
 
-## `--no-test` 选项
+## test 触发约定
 
-`/quill dev --no-test`：跑完 Phase 2 dev 后不自动链式 test，停在 Step 2.1 收工。用户后续可手动 `/quill test --batch <ID>`。
+- `/quill dev`：`RUN_TEST=0`，跑完 dev 即停（**不测**）。
+- `/quill dev --then-test`：`RUN_TEST=1`，dev 每批后接 Step 2.2/2.3（显式开启链式测试）。
+- `/quill test`：独立路径，`RUN_TEST=1`。
+- `/quill:run`：编排器按进度决定是否加 test stage（见 `orchestrate.md`）。
 
 ---
 

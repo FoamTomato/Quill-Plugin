@@ -5,16 +5,16 @@
     "url": "https://github.com/FoamTomato"
   },
   "metadata": {
-    "description": "Quill — 4-agent orchestration + PRD production for any project.",
+    "description": "Quill — 单一职责拆分的研发流命令集 + 动态编排器。",
     "version": "1.0.0"
   },
   "plugins": [
     {
       "name": "quill",
       "source": "./",
-      "description": "Slash commands: /quill prd · /quill ui · /quill dev · /quill test. Hot-updatable skill bundle from xiaohang.site.",
+      "description": "命令：prd/prd-lite · hld/hld-lite · flow · ui(风格 skill 工厂) · dev/dev-lite · test/test-lite · run(动态编排器)。可热更新 skill bundle。",
       "category": "orchestration",
-      "tags": ["prd", "orchestration", "4-agent", "antd", "claude-code"]
+      "tags": ["prd", "hld", "orchestration", "ui-style", "skill", "claude-code"]
     }
   ]
 }

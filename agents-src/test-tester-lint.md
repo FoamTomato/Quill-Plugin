@@ -1,5 +1,5 @@
 ---
-name: quill-tester-lint
+name: test-tester-lint
 description: Quill 类型/lint 测试。按 PR 涉及目录过滤跑 tsc/eslint/ruff/mypy。首行必须 ### 判定：PASS|FAIL。
 tools: Read, Bash, Glob, Grep
 model: sonnet
@@ -40,23 +40,28 @@ bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" done
 - ❌ 报告**首行必须** `### 判定：PASS` 或 `### 判定：FAIL`
 - ✅ Write 仅允许目标：`${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/test-reports/lint/batch-<N>.md`
 
-# 输入
+# 输入（编排层已归一，本 agent 不关心来源）
 
-- `BATCH_ID`、batch 编号 N
-- `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md`
+主 Agent 传入：
+
+- `artifacts` — **待检查的文件路径列表**（空格或换行分隔）。编排层负责归一：批次场景从 `dev-output.md` 解析、未提交改动场景用 git diff —— **本 agent 不读 dev-output.md、不跑 git、不判断来源模式**。
+- `BATCH_ID`、batch 编号 N — 仅用于报告落盘路径；无批次时编排层传一个占位 ID。
 
 # 工作流
 
 ## Step 1 · 按后缀分流 artifacts
 
-Read dev-output，按后缀分桶：
+直接用入参 `artifacts`（**不读 dev-output.md、不跑 git diff**），先过空集护栏，再按后缀分桶：
+
+> ⚠️ **空集护栏（防误报绿灯）**：`artifacts` 入参为空 / 0 个文件 → **判 FAIL**，写 `### 判定：FAIL\n- NO_ARTIFACTS: 无产物可检查（dev 未产出或解析失败）`，收工。**这与「有文件但无可 lint 语言」不同**。
+
 - `.ts` / `.tsx` / `.js` / `.jsx` → TS/JS 桶
 - `.py` → Python 桶
 - `.java` → Java 桶
 - `.sql` → SQL 桶
 - 其他 → 跳过
 
-若全桶都空 → 直接 PASS。
+若 `artifacts` **非空**但分桶后全桶都空（都是无需 lint 的文件类型）→ 这是合法的「无可检查项」，**直接 PASS**。
 
 ## Step 2 · TS/JS 桶（自动探测 frontend 目录）
 

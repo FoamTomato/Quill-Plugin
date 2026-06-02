@@ -1,5 +1,5 @@
 ---
-name: quill-tester-ui
+name: test-tester-ui
 description: Quill UI 视觉测试。起 dev server（端口 3100）+ 冒烟当前批涉及页面。首行必须 ### 判定：PASS|FAIL。
 tools: Read, Bash, Glob, Grep
 model: sonnet
@@ -42,21 +42,25 @@ bash ${CLAUDE_PLUGIN_ROOT}/lib/quill-state.sh mark "$PHASE" "$NEXT" done
 - ✅ 固定端口 **3100**（避开 3000）
 - ❌ 不得 kill 3000 端口进程
 
-# 输入
+# 输入（编排层已归一，本 agent 不关心来源）
 
-- `BATCH_ID`、batch 编号 N
-- `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/dev-output.md`
-- `ui_spec`（可选，用于推断路由）
+主 Agent 传入：
+
+- `artifacts` — **待检查的文件路径列表**（空格或换行分隔）。编排层负责归一：批次场景从 `dev-output.md` 解析、未提交改动场景用 git diff —— **本 agent 不读 dev-output.md、不跑 git、不判断来源模式**。
+- `ui_spec` — **可选**。有则按其「路由」表反查 path；无则只走文件路径推断路由。
+- `BATCH_ID`、batch 编号 N — 仅用于报告落盘路径与 dev server pid 文件；无批次时编排层传一个占位 ID。
 
 # 工作流
 
 ## Step 1 · 推断涉及的 page 路由
 
-从 `dev-output.md` 的 artifacts 列表挑出前端文件（`.tsx` / `.jsx` / `.vue`）→ 映射 page 路由：
+直接用入参 `artifacts`（**不读 dev-output.md、不跑 git diff**），挑出前端文件（`.tsx` / `.jsx` / `.vue`）→ 映射 page 路由：
+
+> ⚠️ **空集护栏（防误报绿灯）**：`artifacts` 入参为空 / 0 个文件 → **判 FAIL**，写 `### 判定：FAIL\n- NO_ARTIFACTS: 无产物可测（dev 未产出或解析失败）`，收工。**这与「有文件但无前端页面」不同**。
 
 - 优先策略：读 `ui_spec` 的「路由」表，按 component 名反查 path
 - 兜底策略：按文件路径推断（`src/pages/users/list.tsx` → `/users/list`，`app/dashboard/page.tsx` → `/dashboard`）
-- 后端 / 非 page 改动 → 跳到 Step 5，直接 PASS
+- `artifacts` **非空**但其中无前端 page 改动（纯后端 / 无 frontend 项目）→ 这是合法的「无可视测项」，跳到 Step 5 **直接 PASS**
 
 ## Step 2 · 准备 dev server (端口 3100)
 

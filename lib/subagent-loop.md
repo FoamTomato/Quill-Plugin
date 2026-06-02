@@ -70,7 +70,7 @@ state.json 不存在 → 按你 agent 文件里的「推荐 plan」初始化，r
 
 每 3-5 轮循环给用户一行短反馈：
 
-> [phase=prd-writer] 进度 4/8 · 当前 §6 API 契约 · 上一步写入 docs/prd/product-requirements.md
+> [phase=prd-writer-full] 进度 4/8 · 当前 §6 API 契约 · 上一步写入 docs/prd/product-requirements.md
 
 让用户感觉到推进，而不是看一堆 sub-agent 调用日志。
 
