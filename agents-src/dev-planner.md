@@ -114,24 +114,28 @@ src/features/dashboard/   # 推断
 
 > **重要语义**：你只投喂"整批所有任务都遵守"的通用规则。任务级精准 skill 由 dev-coder 自行反查。
 
-调本地脚本：
+调本地脚本，**必须带 `--ensure-style`**（开发风格 skill 是必检项，见下）：
 
 ```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-pick.sh plan <主题关键字> | head -6
+bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-pick.sh plan <主题关键字> --ensure-style --max 8
 ```
 
-挑选范围 **≤ 6**，写入 `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt`（每行一个 skill path，无 `.md` 后缀）：
+写入 `${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt`（每行一个 skill path，无 `.md` 后缀）：
 
 | 类别 | 入选条件 |
 |---|---|
-| `habit/*` | 全员遵守，固定入选 |
+| **基础底座 skill** | **🔒 必检、固定入选、语言无关**：`habit/baseline`（七条硬底线，任何任务都成立）。`--ensure-style` 会无条件钉到最前，不会被 `--max` 截掉。 |
+| **开发风格 skill** | **🔒 必检、固定入选**：顶级 `style/<项目风格>`（`/quill:ui` 产物）+ 本批所用语言的 `lang/<lang>/style/*` 或 `lang/<lang>/coding-style/*`（Java 是 `coding-style/`）+ `habit/code-quality/*`。`--ensure-style` 会自动钉到最前。**按本批语言保留对应 style，无关语言的 style 可剔除。** |
+| `habit/*`（其余） | 全员遵守，固定入选 |
 | `framework/<lib>/index` | 整批都用该框架 |
 | `design-pattern/<P>/index` | 整批都基于该模式 |
 
 **不要选**：
 - 单个任务才用的子规则
-- `lang/*`（dev 反查按后缀命中更准）
 - 框架子目录叶子（任务级反查会拿）
+- 与本批语言无关的 `lang/*/style`（如纯后端批就别带 typescript/style）
+
+> 🔒 **铁律：基础底座 + 开发风格 skill 必检**。skill-paths.txt 里**必须含 `habit/baseline`**（语言无关底座，任何任务都钉），**且必须含**至少一项风格类（项目 style 或语言 style/coding-style 或 code-quality）；其它类别看本批是否真用到再选。dev-coder 会加载本文件作为全批基线。
 
 可用 `skill-get.sh <path>` 抽样确认描述：
 ```bash

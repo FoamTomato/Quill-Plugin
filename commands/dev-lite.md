@@ -53,14 +53,14 @@ REQ=$(ls -1t "$QUILL_PRD_DIR"/requirement-*.md 2>/dev/null | head -1)
 **禁止开 sub-agent**，主 Agent 自己执行：
 
 1. 综合任务输入 + 项目结构（必要时 grep / glob 关键目录）
-2. **检索核心 skill（数量夹在 [5,16]）**：从任务里抽关键词/改动文件 glob，调脚本（强制 min 5 / max 16）：
+2. **检索核心 skill（数量夹在 [5,25]；基础底座 + 开发风格 skill 必检）**：从任务里抽关键词/改动文件 glob，调脚本——**必须带 `--ensure-style`**（把底座 `habit/baseline` + 项目风格 `style/*` / 语言风格 `lang/<lang>/style` 或 `lang/<lang>/coding-style` / `habit/code-quality` 钉进结果，不被截掉）：
    ```bash
-   # 按阶段 + 主题（含已检索到的项目风格 skill style/*）
-   bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-pick.sh dev <主题关键字> --min 5 --max 16
-   # 或按改动文件 glob + 关键词反查（含 applies_to 命中的 style/* 风格 skill）
-   bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-match.sh "<file globs>" "<keywords>" --min 5 --max 16
+   # 按阶段 + 主题，--ensure-style 保证底座 + 风格类入选
+   bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-pick.sh dev <主题关键字> --ensure-style --min 5 --max 25
+   # 或按改动文件 glob + 关键词反查（applies_to 命中的 style/* 也会进）
+   bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-match.sh "<file globs>" "<keywords>" --min 5 --max 25
    ```
-   选出的 **5-16 个核心 skill** 列进理解卡；写代码时按需 Read 全文 / 调对应 Skill 工具。
+   **🔒 `habit/baseline` 七条硬底线（语言无关）+ 风格 skill 必检、必用**（baseline 管命名/魔法值/错误处理/最小改动/无残留/边界/依赖；风格 skill 管命名/间距/token/质量）；**其余 skill 看任务是否真用到再取**。按本任务语言保留对应 style（Java 是 `coding-style/`），无关语言的剔除。选出的 5-25 个列进理解卡。
 3. 输出 ≤ 8 行的「理解卡」给用户：
 
 ```
@@ -74,8 +74,10 @@ REQ=$(ls -1t "$QUILL_PRD_DIR"/requirement-*.md 2>/dev/null | head -1)
 ## 风险点
 - <bullet>
 
-## 计划用到的 skill（5-16 个，已检索）
-- <skill-pick/skill-match 选出的路径，如 framework/react/index、style/<项目风格>、simplify ...>
+## 计划用到的 skill（5-25 个，已检索；🔒 含基础底座 + 开发风格 skill）
+- 底座（必）：habit/baseline
+- 风格（必）：<style/<项目风格> / lang/<lang>/style 或 coding-style / habit/code-quality>
+- 其余（按需）：<framework/react/index、simplify ...>
 ```
 
 4. 等用户回 `干` / `改：<点>` / `算了`。**未确认前不写代码**。
@@ -135,3 +137,4 @@ git diff
 3. **不强制 PRD**
 4. **understand 卡点必须等用户确认**
 5. **`--review` 只是质量门，不是回修 loop**
+6. **基础底座 `habit/baseline` + 开发风格 skill 必检必用**（`--ensure-style` 无条件钉入），其余 skill 看任务是否真用到

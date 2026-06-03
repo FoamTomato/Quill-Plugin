@@ -18,9 +18,10 @@ KW="$INDEX_DIR/keywords.json"
 
 [ -f "$TREE" ] || { echo "ERROR: $TREE not found, run skill-bootstrap.sh first" >&2; exit 1; }
 
-# --- 解析 --min / --max（先从 $@ 剥离，剩下的才是 kind + topics）-----------------
+# --- 解析 flag（--min / --max / --ensure-style；先从 $@ 剥离，剩下的才是 kind + topics）---
 MIN=""
 MAX=""
+ENSURE_STYLE=0   # dev/plan 开发时置 1：强制把「开发风格类 skill」钉到结果最前、不被截断
 positional=()
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -28,6 +29,7 @@ while [ $# -gt 0 ]; do
         --max) MAX="$2"; shift 2 ;;
         --min=*) MIN="${1#--min=}"; shift ;;
         --max=*) MAX="${1#--max=}"; shift ;;
+        --ensure-style) ENSURE_STYLE=1; shift ;;
         *) positional+=("$1"); shift ;;
     esac
 done
@@ -40,8 +42,8 @@ TOPICS="$*"
 # 1. kind → 候选 skill paths（按 dir 前缀过滤）
 declare -a kind_filters
 case "$KIND" in
-    ui|style) kind_filters=("style" "framework" "habit/code-quality") ;;
-    prd|sketch|hld|plan|dev) kind_filters=("habit/prd-sync" "habit/code-quality" "design-pattern" "framework" "style") ;;
+    ui|style) kind_filters=("style" "framework" "habit/baseline" "habit/code-quality") ;;
+    prd|sketch|hld|plan|dev) kind_filters=("habit/baseline" "habit/prd-sync" "habit/code-quality" "design-pattern" "framework" "style") ;;
     lint)  kind_filters=("habit/commit" "habit/code-quality" "lang") ;;
     *)     kind_filters=("$KIND") ;;
 esac
@@ -71,6 +73,29 @@ $hit"
     [ -z "$final" ] && final=$(echo "$candidates" | head -5)
 else
     final=$(echo "$candidates" | head -5)
+fi
+
+# 2.5 --ensure-style：把「必读规约类 skill」钉到结果最前（dev/plan 开发必检）------
+# 命中四类，钉到最前 → 后面的 head -max 截断不会丢：
+#   habit/baseline/      语言无关基础写法宪法，无条件必读
+#   habit/code-quality/  通用代码质量/命名风格
+#   style/ 与 */style/    顶级项目风格（/quill:ui 产物）+ 语言代码风格
+#   */*-style/           语言代码风格的别名目录（如 coding-style/）
+if [ "$ENSURE_STYLE" = "1" ]; then
+    style_paths=$(
+        jq -r '.[] | .path
+            | select(
+                startswith("style/")
+                or test("/style/")
+                or test("/[a-z-]*-style/")
+                or startswith("habit/baseline")
+                or startswith("habit/code-quality")
+              )' "$TREE" 2>/dev/null | sort
+    )
+    if [ -n "$style_paths" ]; then
+        # 风格类在前、原 final 在后，dedup 保留首次（即风格优先）
+        final=$(printf '%s\n%s\n' "$style_paths" "$final" | grep -v '^$' | awk '!seen[$0]++')
+    fi
 fi
 
 # 3. --min / --max 夹逼 -------------------------------------------------------

@@ -90,6 +90,15 @@ done < ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt \
 
 把 `loaded-skills.md` 当 reference 读一遍。**没读完不能写代码**。
 
+> 🔒 **基础底座 + 开发风格 skill 必载（兜底自取）**：planner 的 `skill-paths.txt` 正常已含底座 `habit/baseline` + 风格类（顶级 `style/<项目风格>` / `lang/<lang>/style` 或 `lang/<lang>/coding-style` / `habit/code-quality`）。若加载后 `loaded-skills.md` **缺 baseline 或一个风格类都没有**，dev-coder 必须自己补：
+> ```bash
+> grep -qE 'habit/baseline|style/|/style/|/[a-z-]*-style/|habit/code-quality' ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/skill-paths.txt \
+>   || bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-pick.sh dev <本批语言/框架> --ensure-style --max 5 \
+>        | while read -r sp; do echo "## $sp"; bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-get.sh "$sp"; echo "---"; done \
+>        >> ${QUILL_PRIVATE_DIR}/runs/$BATCH_ID/loaded-skills.md
+> ```
+> 写代码时**`habit/baseline` 七条硬底线（命名/魔法值/错误处理/最小改动/无残留/边界/依赖）+ 风格 skill 的约定（命名/间距/token/质量）都是硬约束**，与功能正确性同等。
+
 ## Step 2 · 锁定本 batch
 
 Read dev-plan，找到 `## Batch N` 段。
