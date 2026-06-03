@@ -12,8 +12,8 @@
   "keywords": ["prd", "hld", "orchestration", "ui-style", "skill", "claude-code"],
   "metadata": {
     "skill_bundle": {
-      "default_source": "https://xiaohang.site/skills/bundle/bundle.tar.gz",
-      "fallback_source": "https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz",
+      "default_source": "https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz",
+      "fallback_source": "https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main",
       "local_dir": "~/.claude/quill-skills"
     }
   }
