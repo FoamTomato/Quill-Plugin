@@ -25,9 +25,11 @@ else
     [ -z "$PLUGIN_ROOT" ] && [ -f ./.claude-plugin/plugin.json ] && PLUGIN_ROOT="$(pwd)"
 fi
 [ -z "$PLUGIN_ROOT" ] && { echo "ERROR: cannot resolve plugin root" >&2; exit 2; }
-DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
-FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
-VERSION_URL="https://xiaohang.site/skills/version.txt"
+DEFAULT_SOURCE="https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz"
+FALLBACK_SOURCE="https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main"
+# GitHub tarball 无 version.txt：版本探测用 main 分支最新 commit SHA（短）。
+# 探测失败（离线/限流）时 --check-only 静默跳过，不阻塞。
+VERSION_URL="https://api.github.com/repos/FoamTomato/Prompts-MCP/commits/main"
 
 CHECK_ONLY=0
 SOURCE=""
@@ -50,9 +52,14 @@ CURRENT_VERSION=$(jq -r '.version // "unknown"' "$MANIFEST")
 # --- check-only：只比对远端版本 -----------------------------------------------
 
 if [ "$CHECK_ONLY" = "1" ]; then
-    REMOTE_VERSION=$(curl -sf --max-time 5 "$VERSION_URL" 2>/dev/null || echo "")
+    # GitHub commits API → 取 main 最新 commit 短 SHA 当远端版本。
+    # 不整体喂 jq：commit message 里可能含未转义控制字符会让 jq 解析失败，
+    # 故直接 grep 顶层第一个 "sha" 字段（该端点首行即 commit SHA）。
+    REMOTE_VERSION=$(curl -sf --max-time 5 \
+        -H "Accept: application/vnd.github+json" "$VERSION_URL" 2>/dev/null \
+        | grep -m1 '"sha"' | grep -oE '[0-9a-f]{40}' | head -1 | cut -c1-7)
     if [ -z "$REMOTE_VERSION" ]; then
-        # 离线或远端未就绪，静默退出
+        # 离线 / 限流 / 远端未就绪，静默退出（不阻塞主流程）
         exit 0
     fi
     if [ "$REMOTE_VERSION" != "$CURRENT_VERSION" ]; then

@@ -23,8 +23,10 @@ else
     [ -z "$PLUGIN_ROOT" ] && [ -f ./.claude-plugin/plugin.json ] && PLUGIN_ROOT="$(pwd)"
 fi
 [ -z "$PLUGIN_ROOT" ] && { echo "ERROR: cannot resolve plugin root" >&2; exit 2; }
-DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
-FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
+DEFAULT_SOURCE="https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz"
+FALLBACK_SOURCE="https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main"
+# 版本号 = main 分支最新 commit 短 SHA（与 skill-update.sh --check-only 同源，便于比对）
+VERSION_API="https://api.github.com/repos/FoamTomato/Prompts-MCP/commits/main"
 
 SOURCE=""
 LOCAL_SRC=""
@@ -158,9 +160,17 @@ files_json=$(
       | jq -s '.'
 )
 
+# 版本号：优先取 main 最新 commit 短 SHA（与 update --check-only 同源可直接比对）；
+# 离线 / --local（无对应远端 SHA）时退回日期标记。
+# 不整体喂 jq：commit message 可能含未转义控制字符；直接 grep 顶层首个 sha。
+BUNDLE_VERSION=$(curl -sf --max-time 5 \
+    -H "Accept: application/vnd.github+json" "$VERSION_API" 2>/dev/null \
+    | grep -m1 '"sha"' | grep -oE '[0-9a-f]{40}' | head -1 | cut -c1-7)
+[ -z "$BUNDLE_VERSION" ] && BUNDLE_VERSION="main-$(date +%Y%m%d)"
+
 cat > "$MANIFEST" <<EOF
 {
-  "version": "main-$(date +%Y%m%d)",
+  "version": "$BUNDLE_VERSION",
   "downloaded_at": "$NOW",
   "source": "$SRC_USED",
   "files": ${files_json}
