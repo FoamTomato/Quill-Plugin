@@ -17,8 +17,8 @@ cat > .quill-config.json <<EOF
   "prd_dir": "${PRD_DIR}",
   "private_dir": ".quill",
   "skill_bundle": {
-    "source": "https://xiaohang.site/skills/bundle.tar.gz",
-    "fallback": "https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz",
+    "source": "https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz",
+    "fallback": "https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main",
     "local_dir": "~/.claude/quill-skills",
     "version": "",
     "auto_check_update": true

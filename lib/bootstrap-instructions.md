@@ -48,8 +48,5 @@ test -f "$QUILL_SKILL_DIR/manifest.json" && echo OK || echo MISSING
 
 MISSING → `bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-bootstrap.sh`
 
-异步检查更新：
-
-```bash
-bash ${CLAUDE_PLUGIN_ROOT}/lib/skill-update.sh --check-only &
-```
+> **不自动检查更新**。skill bundle 升级由用户手动触发 `/quill:update-skills`。
+> 每次 slash 命令都跑 `--check-only` 会污染上下文（多打 1 步 Bash），也会在弱网下卡 5s。

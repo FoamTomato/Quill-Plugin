@@ -38,8 +38,60 @@ EOF
 fi
 
 CONFIG_FILE="./.quill-config.json"
-PROJECT_NAME="$(basename "$(pwd)")"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$HOME/个人项目/other/quill-plugin}"
+
+# --- 项目名推断 -----------------------------------------------------------
+# 优先级：CLAUDE.md H1 → package.json name → Cargo.toml name → pyproject.toml name
+# → basename(pwd) 兜底。basename 太脆（很多人项目目录就是 src/ / app/ / repo/）。
+detect_project_name() {
+    local name=""
+    if [ -f CLAUDE.md ]; then
+        name=$(awk '/^# / { sub(/^# +/, ""); print; exit }' CLAUDE.md 2>/dev/null)
+        # 砍掉「· 副标题」/ 「- 描述」尾巴，只留核心名
+        name=$(echo "$name" | sed -E 's/[ ]*[·—\-].*$//' | sed -E 's/[[:space:]]+$//')
+    fi
+    if [ -z "$name" ] && [ -f package.json ]; then
+        name=$(jq -r '.name // empty' package.json 2>/dev/null | sed 's|^@[^/]*/||')
+    fi
+    if [ -z "$name" ] && [ -f Cargo.toml ]; then
+        name=$(awk -F'"' '/^name[ ]*=/ { print $2; exit }' Cargo.toml 2>/dev/null)
+    fi
+    if [ -z "$name" ] && [ -f pyproject.toml ]; then
+        name=$(awk -F'"' '/^name[ ]*=/ { print $2; exit }' pyproject.toml 2>/dev/null)
+    fi
+    [ -z "$name" ] && name="$(basename "$(pwd)")"
+    echo "$name"
+}
+PROJECT_NAME="$(detect_project_name)"
+
+# --- plugin 路径兜底 ------------------------------------------------------
+# CLAUDE_PLUGIN_ROOT 由 claude-code 注入；没注入时扫 plugin 缓存取最新版本。
+# 不写死 ~/个人项目/other/quill-plugin（开发机以外的环境会直接挂）。
+resolve_plugin_root() {
+    if [ -n "$CLAUDE_PLUGIN_ROOT" ] && [ -d "$CLAUDE_PLUGIN_ROOT" ]; then
+        echo "$CLAUDE_PLUGIN_ROOT"
+        return
+    fi
+    # 扫 ~/.claude/plugins/cache/*/quill/<version>/ 取版本号最大的
+    local found
+    found=$(ls -1d "$HOME"/.claude/plugins/cache/*/quill/*/ 2>/dev/null \
+              | sort -V | tail -1 | sed 's:/*$::')
+    if [ -n "$found" ] && [ -d "$found" ]; then
+        echo "$found"
+        return
+    fi
+    # 退化到当前 pwd（开发场景：在 plugin 仓库根目录跑）
+    if [ -f ./.claude-plugin/plugin.json ]; then
+        pwd
+        return
+    fi
+    echo ""
+}
+PLUGIN_ROOT="$(resolve_plugin_root)"
+if [ -z "$PLUGIN_ROOT" ]; then
+    echo "ERROR: 找不到 quill plugin 路径。请通过 'claude plugin install quill' 安装，或在 plugin 仓库根目录运行。" >&2
+    echo "QUILL_REFUSE=plugin_not_found"
+    exit 2
+fi
 
 if [ -f "$CONFIG_FILE" ]; then
     if ! command -v jq >/dev/null 2>&1; then

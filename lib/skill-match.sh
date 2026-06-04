@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # skill-match.sh — 按文件路径 glob + 关键字反查 skill
 #
-# 用法：bash skill-match.sh "<file_globs>" "<keywords>"
+# 用法：bash skill-match.sh [--min N] [--max M] "<file_globs>" "<keywords>"
 #   file_globs  逗号分隔，如 "src/**/*.tsx,components/**/*.tsx"
 #   keywords    空格分隔
+#   --min N     结果不足 N 个时，放宽（lang 推断 / 全 tree 兜底）补齐到 N
+#   --max M     结果超过 M 个时，截断到 M
 #
-# 输出：一行一个 skill 路径
+# 输出：一行一个 skill 路径。无 --min/--max 时行为与旧版一致（不设上限）。
 
 set -e
 
@@ -14,6 +16,21 @@ INDEX_DIR="$LOCAL_DIR/index"
 PATHS="$INDEX_DIR/paths.json"
 KW="$INDEX_DIR/keywords.json"
 TREE="$INDEX_DIR/tree.json"
+
+# --- 解析 --min / --max（先剥离，剩下才是 positional）-----------------------
+MIN=""
+MAX=""
+positional=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --min) MIN="$2"; shift 2 ;;
+        --max) MAX="$2"; shift 2 ;;
+        --min=*) MIN="${1#--min=}"; shift ;;
+        --max=*) MAX="${1#--max=}"; shift ;;
+        *) positional+=("$1"); shift ;;
+    esac
+done
+set -- "${positional[@]}"
 
 FILE_GLOBS="${1:-}"
 KEYWORDS="${2:-}"
@@ -63,4 +80,23 @@ $hit"
     fi
 fi
 
-echo "$results" | grep -v '^$' | sort -u
+final=$(echo "$results" | grep -v '^$' | sort -u)
+
+# --- --min / --max 夹逼 ------------------------------------------------------
+if [ -n "$MIN" ] || [ -n "$MAX" ]; then
+    have=$(echo "$final" | grep -c '.' || true)
+    # 补齐到 min：先放宽关键字（已在 results），再从全 tree 按 kind 优先级兜底
+    if [ -n "$MIN" ] && [ "$have" -lt "$MIN" ]; then
+        # 兜底池：habit/code-quality + design-pattern + framework + lang（通用度高的在前）
+        pad=$(jq -r '.[]
+            | select((.kind=="habit") or (.kind=="design-pattern") or (.kind=="framework") or (.kind=="lang"))
+            | .path' "$TREE" 2>/dev/null | sort -u)
+        final=$(printf '%s\n%s\n' "$final" "$pad" | grep -v '^$' | awk '!seen[$0]++')
+    fi
+    # 截断到 max
+    if [ -n "$MAX" ]; then
+        final=$(echo "$final" | grep -v '^$' | head -n "$MAX")
+    fi
+fi
+
+echo "$final" | grep -v '^$'

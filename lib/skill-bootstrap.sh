@@ -23,8 +23,10 @@ else
     [ -z "$PLUGIN_ROOT" ] && [ -f ./.claude-plugin/plugin.json ] && PLUGIN_ROOT="$(pwd)"
 fi
 [ -z "$PLUGIN_ROOT" ] && { echo "ERROR: cannot resolve plugin root" >&2; exit 2; }
-DEFAULT_SOURCE="https://xiaohang.site/skills/bundle.tar.gz"
-FALLBACK_SOURCE="https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz"
+DEFAULT_SOURCE="https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz"
+FALLBACK_SOURCE="https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main"
+# 版本号 = main 分支最新 commit 短 SHA（与 skill-update.sh --check-only 同源，便于比对）
+VERSION_API="https://api.github.com/repos/FoamTomato/Prompts-MCP/commits/main"
 
 SOURCE=""
 LOCAL_SRC=""
@@ -53,7 +55,8 @@ if [ -n "$LOCAL_SRC" ]; then
         echo "ERROR: $LOCAL_SRC/skills not found" >&2
         exit 1
     fi
-    rsync -a --delete "$LOCAL_SRC/skills/" "$LOCAL_DIR/skills/"
+    # --exclude=style/：保护用户用 /quill:ui 作者化的本地风格 skill 不被上游同步删掉
+    rsync -a --delete --exclude='style/' "$LOCAL_SRC/skills/" "$LOCAL_DIR/skills/"
     SRC_USED="local:$LOCAL_SRC"
 else
     BUNDLE="$TMP_DIR/bundle.tar.gz"
@@ -83,7 +86,8 @@ else
         echo "ERROR: skills/ not found in bundle" >&2
         exit 1
     fi
-    rsync -a --delete "$SKILLS_SRC/" "$LOCAL_DIR/skills/"
+    # --exclude=style/：同上，保护本地风格 skill
+    rsync -a --delete --exclude='style/' "$SKILLS_SRC/" "$LOCAL_DIR/skills/"
 fi
 
 # --- 2. 合并 plugin 自带的 agents-src / prompts-src ----------------------------
@@ -104,6 +108,16 @@ fi
 if [ -d "$LOCAL_DIR/agents" ]; then
     AGENTS_LINK_DIR="$HOME/.claude/agents"
     mkdir -p "$AGENTS_LINK_DIR"
+    # 先清理悬空死链：若某 quill-<name>.md 软链指向已不存在的源（agent 改名/删除后），
+    # 删之免得 Claude 注册到坏 agent。
+    pruned=0
+    for link in "$AGENTS_LINK_DIR"/quill-*.md; do
+        [ -L "$link" ] || continue
+        if [ ! -e "$link" ]; then          # 符号链接的目标已不存在
+            rm -f "$link"; pruned=$((pruned+1))
+        fi
+    done
+    [ "$pruned" -gt 0 ] && echo "[skill-bootstrap] pruned $pruned dead agent symlink(s)" >&2
     linked=0
     for src in "$LOCAL_DIR"/agents/*.md; do
         [ -f "$src" ] || continue
@@ -146,9 +160,17 @@ files_json=$(
       | jq -s '.'
 )
 
+# 版本号：优先取 main 最新 commit 短 SHA（与 update --check-only 同源可直接比对）；
+# 离线 / --local（无对应远端 SHA）时退回日期标记。
+# 不整体喂 jq：commit message 可能含未转义控制字符；直接 grep 顶层首个 sha。
+BUNDLE_VERSION=$(curl -sf --max-time 5 \
+    -H "Accept: application/vnd.github+json" "$VERSION_API" 2>/dev/null \
+    | grep -m1 '"sha"' | grep -oE '[0-9a-f]{40}' | head -1 | cut -c1-7)
+[ -z "$BUNDLE_VERSION" ] && BUNDLE_VERSION="main-$(date +%Y%m%d)"
+
 cat > "$MANIFEST" <<EOF
 {
-  "version": "main-$(date +%Y%m%d)",
+  "version": "$BUNDLE_VERSION",
   "downloaded_at": "$NOW",
   "source": "$SRC_USED",
   "files": ${files_json}

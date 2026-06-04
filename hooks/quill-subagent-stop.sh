@@ -24,7 +24,7 @@ fi
 
 # 只处理 Quill 自己的 subagent
 case "${SUBAGENT:-}" in
-  quill-planner|quill-dev|quill-tester-prd|quill-tester-ui|quill-tester-lint|prd-writer|hld-writer|flow-writer|ui-designer) ;;
+  dev-planner|dev-coder|test-tester-prd|test-tester-ui|test-tester-lint|prd-writer-full|prd-writer-lite|hld-writer-full|hld-writer-lite|flow-writer|ui-style-author) ;;
   *) exit 0 ;;
 esac
 
@@ -39,7 +39,7 @@ PRIV_DIR="$REPO_ROOT/.quill"
 # 找最新的 BATCH 目录（按 mtime）
 BATCH_DIR=$(ls -1dt "$PRIV_DIR"/runs/*/ 2>/dev/null | head -1)
 
-# PRD/UI writer 在非 dev 流程中不一定有 BATCH，写到 logs/agent-ids.json 兜底
+# 文档类 writer 在非 dev 流程中不一定有 BATCH，写到 logs/agent-ids.json 兜底
 if [ -z "$BATCH_DIR" ]; then
   mkdir -p "$PRIV_DIR/logs"
   IDS_FILE="$PRIV_DIR/logs/agent-ids.json"
@@ -51,38 +51,38 @@ else
 fi
 
 if [ ! -f "$IDS_FILE" ]; then
-  echo '{"dev":null,"dev_history":{},"testers":{"prd":null,"ui":null,"lint":null},"planner_history":[],"prd_chain":{"prd_writer":null,"hld_writer":null,"flow_writer":null},"ui_designer":null}' > "$IDS_FILE"
+  echo '{"dev":null,"dev_history":{},"testers":{"prd":null,"ui":null,"lint":null},"planner_history":[],"doc_chain":{"prd_writer_full":null,"prd_writer_lite":null,"hld_writer_full":null,"hld_writer_lite":null,"flow_writer":null},"ui_style_author":null}' > "$IDS_FILE"
 fi
 
 TS=$(date +"%y%m%d %H%M")
 
 case "$SUBAGENT" in
-  quill-dev)
+  dev-coder)
     tmp=$(mktemp)
     jq --arg id "$AGENT_ID" '.dev = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
-    echo "[$TS] SubagentStop quill-dev → DEV_ID=$AGENT_ID" >> "$LOG_FILE"
+    echo "[$TS] SubagentStop dev-coder → DEV_ID=$AGENT_ID" >> "$LOG_FILE"
     ;;
-  quill-tester-prd|quill-tester-ui|quill-tester-lint)
-    DIM="${SUBAGENT#quill-tester-}"
+  test-tester-prd|test-tester-ui|test-tester-lint)
+    DIM="${SUBAGENT#test-tester-}"
     tmp=$(mktemp)
     jq --arg id "$AGENT_ID" --arg dim "$DIM" '.testers[$dim] = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
     echo "[$TS] SubagentStop $SUBAGENT → TESTER_${DIM}_ID=$AGENT_ID" >> "$LOG_FILE"
     ;;
-  quill-planner)
+  dev-planner)
     tmp=$(mktemp)
     jq --arg id "$AGENT_ID" '.planner_history += [$id]' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
-    echo "[$TS] SubagentStop quill-planner (one-shot, id=$AGENT_ID)" >> "$LOG_FILE"
+    echo "[$TS] SubagentStop dev-planner (one-shot, id=$AGENT_ID)" >> "$LOG_FILE"
     ;;
-  prd-writer|hld-writer|flow-writer)
+  prd-writer-full|prd-writer-lite|hld-writer-full|hld-writer-lite|flow-writer)
     KEY=$(echo "$SUBAGENT" | tr '-' '_')
     tmp=$(mktemp)
-    jq --arg id "$AGENT_ID" --arg k "$KEY" '.prd_chain[$k] = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
+    jq --arg id "$AGENT_ID" --arg k "$KEY" '.doc_chain[$k] = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
     echo "[$TS] SubagentStop $SUBAGENT → id=$AGENT_ID" >> "$LOG_FILE"
     ;;
-  ui-designer)
+  ui-style-author)
     tmp=$(mktemp)
-    jq --arg id "$AGENT_ID" '.ui_designer = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
-    echo "[$TS] SubagentStop ui-designer → id=$AGENT_ID" >> "$LOG_FILE"
+    jq --arg id "$AGENT_ID" '.ui_style_author = $id' "$IDS_FILE" > "$tmp" && mv "$tmp" "$IDS_FILE"
+    echo "[$TS] SubagentStop ui-style-author → id=$AGENT_ID" >> "$LOG_FILE"
     ;;
 esac
 

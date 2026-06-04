@@ -1,7 +1,7 @@
 {
   "name": "quill",
-  "version": "0.2.0",
-  "description": "Quill — 4-agent orchestration + PRD production for any project. Slash commands /quill prd|ui|dev|test.",
+  "version": "0.3.0",
+  "description": "Quill — 单一职责拆分的研发流命令集 + 动态编排器。命令：/quill prd|prd-lite|hld|hld-lite|flow|ui|dev|dev-lite|test|test-lite|run。",
   "author": {
     "name": "foamtomato",
     "url": "https://github.com/FoamTomato"
@@ -9,11 +9,11 @@
   "homepage": "https://github.com/FoamTomato/Quill-Plugin",
   "repository": "https://github.com/FoamTomato/Quill-Plugin",
   "license": "MIT",
-  "keywords": ["prd", "orchestration", "4-agent", "antd", "claude-code"],
+  "keywords": ["prd", "hld", "orchestration", "ui-style", "skill", "claude-code"],
   "metadata": {
     "skill_bundle": {
-      "default_source": "https://xiaohang.site/skills/bundle/bundle.tar.gz",
-      "fallback_source": "https://github.com/foamtomato/prompts-mcp/archive/refs/heads/main.tar.gz",
+      "default_source": "https://github.com/FoamTomato/Prompts-MCP/archive/refs/heads/main.tar.gz",
+      "fallback_source": "https://codeload.github.com/FoamTomato/Prompts-MCP/tar.gz/refs/heads/main",
       "local_dir": "~/.claude/quill-skills"
     }
   }
