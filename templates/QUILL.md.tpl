@@ -25,7 +25,7 @@
 |---|---|---|
 | `/quill:ui`       | UI 风格 skill 工厂（扫描/选/总结 → 存可复用 skill） | ⏳ |
 | `/quill:dev`      | 多批次开发编排（默认不测）             | ⏳ |
-| `/quill:dev-lite` | skill 驱动开发（核心 skill 5-16 个），不强制 PRD | ⏳ |
+| `/quill:dev-lite` | skill 驱动开发（核心 skill 5-25 个），不强制 PRD | ⏳ |
 | `/quill:test`     | 三维测试（PRD/UI/Lint，支持 git-diff 模式） | ⏳ |
 | `/quill:test-lite`| 核心轻量测试（只测未提交改动）         | ⏳ |
 | `/quill:run`      | 动态编排器（auto-judge 进度，≤3 并发）  | ⏳ |
@@ -56,7 +56,7 @@
 - `/quill:ui` — 扫描/选/总结风格 → 存成可复用 style skill，dev 自动用
 
 **开发与测试**：
-- 开发：`/quill:dev`（多批次，默认不测）/ `/quill:dev-lite [任务] [--review]`（skill 驱动，核心 skill 5-16 个，不强制 PRD）
+- 开发：`/quill:dev`（多批次，默认不测）/ `/quill:dev-lite [任务] [--review]`（skill 驱动，核心 skill 5-25 个，不强制 PRD）
 - 测试：`/quill:test [--batch <ID>]`（完整三维，支持 git-diff）/ `/quill:test-lite`（核心轻量，只测未提交改动）
 - 智能编排：`/quill:run`（auto-judge 进度，动态调度 planner/dev/test，≤3 并发）
 

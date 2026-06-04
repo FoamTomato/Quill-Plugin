@@ -1,6 +1,6 @@
 {
   "name": "quill",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Quill — 单一职责拆分的研发流命令集 + 动态编排器。命令：/quill prd|prd-lite|hld|hld-lite|flow|ui|dev|dev-lite|test|test-lite|run。",
   "author": {
     "name": "foamtomato",
