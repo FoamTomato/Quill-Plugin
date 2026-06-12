@@ -35,7 +35,7 @@ if [ "$SKILLS_ONLY" != "1" ]; then
     if ! command -v claude >/dev/null 2>&1; then
         echo "⚠️  claude CLI 不在 PATH，跳过 plugin 升级。请手动跑："
         echo "    claude plugin marketplace update quill"
-        echo "    claude plugin update quill"
+        echo "    claude plugin update quill@quill"
     else
         # 先刷 marketplace（拉新 commit 到 cache）
         if claude plugin marketplace list 2>/dev/null | awk '/^  ❯ /{print $2}' | grep -qx "quill"; then
@@ -47,8 +47,8 @@ if [ "$SKILLS_ONLY" != "1" ]; then
 
         # 再 update plugin
         if claude plugin list 2>/dev/null | grep -q "quill@quill"; then
-            echo "[update] claude plugin update quill"
-            claude plugin update quill || echo "⚠️  plugin update 失败，继续"
+            echo "[update] claude plugin update quill@quill"
+            claude plugin update quill@quill || echo "⚠️  plugin update 失败，继续"
             echo "ℹ️  plugin 更新已应用，重启 Claude Code 后生效。"
         else
             echo "⚠️  plugin 'quill@quill' 未安装，跳过 plugin update"
