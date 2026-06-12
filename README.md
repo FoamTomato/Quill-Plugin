@@ -159,7 +159,7 @@ quill-plugin/
 │   ├── prd-writer-lite.md       # 需求精炼器（产 requirement-*.md）
 │   ├── hld-writer-full.md       # 完整 HLD（9 段 + 伪代码）
 │   ├── hld-writer-lite.md       # 精简 HLD（步骤 + 关键伪代码）
-│   ├── flow-writer.md           # 流程图（40px 网格布局）
+│   ├── flow-writer.md           # 横向泳道时序图（一泳道=一模块，填色=实现状态）
 │   ├── ui-style-author.md       # UI 风格 skill 工厂
 │   ├── dev-planner.md           # 拆批次 + 设计指引 + skill 路径
 │   ├── dev-coder.md             # 多批次写代码 + 回写 checklist
